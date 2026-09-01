@@ -1,0 +1,56 @@
+@startuml
+' Diagram-Owner: docs/reports/architecture/chorotate-architecture-decision.md
+' Parent-Plan: docs/epics/chorotate/core-experience/prds/chorotate-mvp.md
+title ChoRotate MVP Architecture
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+
+actor "Allowed household\nmember" as Member
+
+cloud "Google OAuth" as Google
+cloud "Textbelt public free API\nPOST /text, key=textbelt\n1 SMS segment/day" as Textbelt
+
+node "Cloudflare Worker\nReact Router v8 + TypeScript" as Worker {
+  component "fetch\nRoutes, loaders, actions" as Fetch
+  component "Route-local auth +\nallowlist + origin checks" as Access
+  component "Chore-period / rotation /\nassignment services" as Domain
+  component "scheduled\nOutbox dispatcher" as Scheduled
+}
+
+database "Cloudflare D1\nAuthoritative state" as D1 {
+  component "Household, members + E.164\ncontact consent/suppression,\nchores, rotation config" as Config
+  component "Materialized chore-period\nassignments + versions" as Assignments
+  component "Better Auth users,\naccounts, sessions" as Sessions
+  component "Append-only audit events\n+ immutability triggers" as Audit
+  component "SMS occurrences, claims,\nquota/result/unknown evidence" as Outbox
+}
+
+Member --> Fetch : HTTPS / secure cookie
+Fetch --> Access
+Access --> Sessions : validate revocable session
+Access --> Config : check exact active email
+Fetch --> Google : OAuth redirect/callback
+Fetch --> Domain : authenticated reads/mutations
+Domain --> Assignments : materialize, reassign, swap
+Assignments --> Audit : trigger appends before/after event
+Domain --> Outbox : create/supersede SMS occurrence\nmark correction-needed
+
+Scheduled --> Outbox : claim bounded due batch
+Scheduled --> Textbelt : one-segment SMS; no idempotency key
+Textbelt --> Scheduled : textId / quota / result when known
+Scheduled --> Outbox : persist accepted, failed,\nmissed, or delivery_unknown\n(no ambiguous/next-day retry)
+
+note right of Textbelt
+  Free key has no reply webhook.
+  Exactly-once handset delivery
+  cannot be guaranteed.
+end note
+
+note right of D1
+  No KV, Durable Objects, Queues,
+  AWS, or competing state authority.
+end note
+
+@enduml

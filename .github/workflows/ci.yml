@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # actions/checkout v7.0.1 — immutable release commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # jdx/mise-action v4.3.0 — immutable release commit; installs Node from mise.toml.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          cache: true
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Detect install or generated-file mutation
+        run: test -z "$(git status --porcelain=v1 --untracked-files=all)"
+      - name: Install browser runtime
+        run: npx playwright install --with-deps chromium
+      - name: Credential-free non-mutating release gate
+        run: npm run check:release

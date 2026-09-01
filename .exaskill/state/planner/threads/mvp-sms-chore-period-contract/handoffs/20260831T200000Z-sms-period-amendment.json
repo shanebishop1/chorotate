@@ -1,0 +1,40 @@
+{
+  "version": "v1",
+  "thread_slug": "mvp-sms-chore-period-contract",
+  "timestamp_utc": "2026-08-31T20:00:00Z",
+  "planning_mode": "approved material-contract amendment and execution handoff",
+  "artifact_paths": {
+    "canonical": [
+      "docs/epics/chorotate/core-experience/prds/chorotate-mvp.md",
+      "docs/milestones/mvp/INDEX.md",
+      "docs/epics/chorotate/core-experience/prds/INDEX.md",
+      "docs/epics/chorotate/core-experience/prds/reminder-outbox-and-sms.md",
+      "docs/reports/architecture/chorotate-architecture-decision.md"
+    ],
+    "continuity": [
+      ".exaskill/state/planner/threads/mvp-sms-chore-period-contract/STATE.md",
+      ".exaskill/state/planner/threads/mvp-sms-chore-period-contract/handoffs/20260831T200000Z-sms-period-amendment.md",
+      ".exaskill/state/planner/threads/mvp-sms-chore-period-contract/handoffs/20260831T200000Z-sms-period-amendment.json"
+    ]
+  },
+  "open_decisions": [],
+  "outstanding_research_questions": [],
+  "recommended_next_workflow": "exaskill/plan/workflows/resume-from-handoff.md",
+  "read_first_paths": [
+    ".exaskill/state/planner/threads/mvp-sms-chore-period-contract/STATE.md",
+    "docs/milestones/mvp/INDEX.md",
+    "docs/epics/chorotate/core-experience/prds/reminder-outbox-and-sms.md",
+    "docs/reports/architecture/chorotate-architecture-decision.md"
+  ],
+  "delegation_state": {
+    "status": "complete",
+    "active_lanes": [
+      {
+        "lane_id": "textbelt-contract-research",
+        "owner": "researcher",
+        "objective": "Verify current free-endpoint, quota, reply, segment, and timeout limitations.",
+        "status": "complete and integrated"
+      }
+    ]
+  }
+}
