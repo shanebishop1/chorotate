@@ -45,18 +45,18 @@ In a Google Cloud OAuth web client, configure the exact deployed HTTPS origin. R
 
 `https://<deployment-host>/api/auth/callback/google`
 
-Set the inputs without putting values on the command line or in shell history:
+Prepare the inputs without putting values on the command line or in shell history. On a fresh service, do not run these commands until the numbered rollout has completed the first approved deployment with SMS disabled:
 
 ```sh
 npx wrangler secret put GOOGLE_CLIENT_ID --env production
 npx wrangler secret put GOOGLE_CLIENT_SECRET --env production
 ```
 
-Keep test and production clients separate. Verify the consent-screen configuration, published/test-user status as appropriate, exact authorized JavaScript origin, and that no wildcard callback is present.
+Each standard `wrangler secret put` creates and immediately deploys a new Worker version. Record that external mutation and verify only secret names afterward; do not print values. Keep test and production clients separate. Verify the consent-screen configuration, published/test-user status as appropriate, exact authorized JavaScript origin, and that no wildcard callback is present.
 
 ### Better Auth
 
-Generate a cryptographically random value of at least 32 bytes outside the repository and enter it interactively with `npx wrangler secret put BETTER_AUTH_SECRET --env production`. Do not pass it as a command argument. Rotating it invalidates cryptographic session material; plan a sign-in interruption and revoke old database sessions.
+Generate a cryptographically random value of at least 32 bytes outside the repository and, at the numbered post-deployment step, enter it interactively with `npx wrangler secret put BETTER_AUTH_SECRET --env production`. Do not pass it as a command argument. This command also creates and immediately deploys a Worker version. Rotating it invalidates cryptographic session material; plan a sign-in interruption and revoke old database sessions.
 
 ### Reminder transport status and Textbelt target
 
@@ -66,7 +66,7 @@ The public free key permits only one SMS **segment** per day, and its reset boun
 
 Textbelt applies STOP suppression, but the public key provides no reply webhook ingestion to ChoRotate. ChoRotate does not read ordinary SMS replies. When a member opts out through STOP or another reasonable channel, promptly use the private contact workflow below to record `suppression: "suppressed"` (and `consent: "revoked"` when applicable) before the next occurrence.
 
-### Private exact-email and contact preparation
+### Private first-run bootstrap and later contact preparation
 
 Create an operator-owned JSON file **outside this repository**. The file must be mode `0600`, contain exactly the four stable member IDs, exact lowercase Google emails, and each member's E.164-or-null/consent/suppression state. Use only `not_recorded`, `consented`, or `revoked` for consent and `not_suppressed` or `suppressed` for suppression. A sendable contact is E.164 (`+` plus 2–15 digits beginning 1–9), consented, and not suppressed. Never paste the file or generated SQL into a terminal, log, issue, or chat.
 
@@ -88,14 +88,18 @@ Create an operator-owned JSON file **outside this repository**. The file must be
 
 Repeat the member object exactly once for each stable ID `jack`, `joe`, `dylan`, and `shane`.
 
-Prepare a new mode-`0600` SQL file. The tool refuses repository-contained paths, permissive input modes, malformed/duplicate identities, malformed E.164, unknown states, output overwrite, or any member set other than Jack/Joe/Dylan/Shane's stable IDs. It reports only category counts, never values.
+Prepare a new mode-`0600` SQL file. Both modes refuse repository-contained paths, permissive input modes, malformed/duplicate identities, malformed E.164, unknown states, output overwrite, or any member set other than Jack/Joe/Dylan/Shane's stable IDs. They report only category counts, never values.
+
+For a **fresh migrated production database**, generate the one-time bootstrap at numbered rollout step 3, after exporting the production settings below. The bootstrap validates those settings, refuses any pre-existing ChoRotate household/member/identity/chore/rotation structure, and creates exactly the household, four members, four exact allowlist rows, two chores, and two accepted rotation configurations. It deliberately creates no assignments.
+
+For an **already bootstrapped database**, generate an update-only exact-email/contact file:
 
 ```sh
 chmod 600 <private-json-path>
 npm run operator:contacts:prepare -- --input <private-json-path> --output <new-private-sql-path>
 ```
 
-The generated SQL updates only D1 `allowlisted_identities` and `members` rows and asserts that exactly four rows matched each update. Review it only in an approved private editor, then apply it to local or remote D1 as applicable. Securely remove it when retention is no longer required.
+The update-only SQL changes only D1 identity/contact/session state and asserts that exactly four identity and member rows matched. A phone/consent/suppression-only update preserves auth bindings. If an exact email changes, the same atomic import deletes that member's old D1 sessions and clears only that identity's `auth_user_id`; the new exact Google identity must sign in and claim the released row. Review either generated file only in an approved private editor, then apply it to local or remote D1 as applicable. Securely remove it when retention is no longer required.
 
 ### Cloudflare D1 and Worker configuration
 
@@ -112,8 +116,11 @@ export PRODUCTION_D1_DATABASE_ID='<returned-d1-uuid>'
 export PRODUCTION_CANONICAL_ORIGIN='https://<deployment-host>'
 export PRODUCTION_HOUSEHOLD_TIME_ZONE='<iana-time-zone>'
 export PRODUCTION_HOUSEHOLD_WEEK_START='<weekday>'
+export PRODUCTION_REMINDER_EVENING_LOCAL_TIME='20:00'
+export PRODUCTION_REMINDER_MORNING_LOCAL_TIME='08:00'
 export PRODUCTION_OWNER_EMAIL='<exact-lowercase-owner-email>'
 export PRODUCTION_ALLOWED_EMAILS='<exact-comma-separated-lowercase-emails>'
+export PRODUCTION_REMINDER_SMS_ENABLED='false'
 export PRODUCTION_REMINDER_BATCH_SIZE='25'
 export PRODUCTION_REMINDER_LEASE_MILLISECONDS='300000'
 export PRODUCTION_REMINDER_MAX_ATTEMPTS='5'
@@ -122,7 +129,7 @@ export PRODUCTION_REMINDER_RETRY_BASE_MILLISECONDS='60000'
 export PRODUCTION_REMINDER_RETRY_MAX_MILLISECONDS='900000'
 ```
 
-The production script validates all current names before building, injects the D1 UUID and plain bindings into a mode-0600 temporary Wrangler config, selects `CLOUDFLARE_ENV=production` for the Vite build, redacts injected values from child output, and deletes temporary/emitted deploy configs. Reminder bounds are: batch `1–100`, lease `6000–3600000` ms, attempts `1–20`, provider timeout `1000–30000` ms, retry base `1000–3600000` ms, and retry max `1000–86400000` ms. Retry max must be at least retry base, and lease must be at least `batch × provider timeout + 5000` ms. D1 `households.reminder_evening_local_time` and `reminder_morning_local_time` are authoritative and use `HH:mm` (`00:00`–`23:59`). D1 chores must retain Trash Friday (`5`) and Dishwasher Monday (`1`) boundaries. Run `npm run doctor`; production placeholders and non-contiguous migrations fail the check.
+The production script validates all current names before building, injects the D1 UUID and plain bindings into a mode-0600 temporary Wrangler config, selects `CLOUDFLARE_ENV=production` for the Vite build, redacts injected values from child output, and deletes temporary/emitted deploy configs. `PRODUCTION_REMINDER_SMS_ENABLED` accepts only `true` or `false`; keep it `false` through migration, deployment, OAuth, materialization, and non-sending smoke. When false, Cron returns before planning, transport construction, or dispatch. Reminder bounds are: batch `1–100`, lease `6000–3600000` ms, attempts `1–20`, provider timeout `1000–30000` ms, retry base `1000–3600000` ms, and retry max `1000–86400000` ms. Retry max must be at least retry base, and lease must be at least `batch × provider timeout + 5000` ms. D1 `households.reminder_evening_local_time` and `reminder_morning_local_time` are authoritative and use `HH:mm` (`00:00`–`23:59`). D1 chores must retain Trash Friday (`5`) and Dishwasher Monday (`1`) boundaries. Run `npm run doctor`; production placeholders and non-contiguous migrations fail the check.
 
 ## 3. Migrate, smoke, and deploy
 
@@ -137,23 +144,39 @@ The production script validates all current names before building, injects the D
 
    Stop if the first preview is unexpected or the final list does not show `0001` through `0008` applied in order. Never edit migration history to force success.
 
-3. Apply the prepared access-controlled SQL input: `npx wrangler d1 execute chorotate-production --remote --file <private-sql-path>`. Do not use `--command` with contact values. If import fails, D1 returns the database to its original state; retain the sanitized error category and do not blindly retry until the cause is known.
-4. Run `npm run operator:d1:verify`. It captures Wrangler JSON internally and emits only pass/fail check names. It requires authenticated Cloudflare access to `chorotate-production`, verifies the exact `0001`–`0008` migration names, four active exact identities/sendable contacts, chore boundaries, and no duplicate logical outbox occurrences, and never invokes Textbelt. Missing, malformed, unconsented, or suppressed active contacts fail readiness without printing them. A deliberate opt-out remains correctly non-sendable; record that approved exception rather than weakening D1 state or forcing a send.
+3. Prepare and apply the access-controlled input. For a fresh database, the production exports must already be set; generate and apply the bootstrap exactly once:
+
+   ```sh
+   chmod 600 <private-json-path>
+   npm run operator:bootstrap:prepare -- \
+     --input <private-json-path> \
+     --output <new-private-bootstrap-sql-path> \
+     --time-zone "$PRODUCTION_HOUSEHOLD_TIME_ZONE" \
+     --week-start "$PRODUCTION_HOUSEHOLD_WEEK_START" \
+     --evening-time "$PRODUCTION_REMINDER_EVENING_LOCAL_TIME" \
+     --morning-time "$PRODUCTION_REMINDER_MORNING_LOCAL_TIME"
+   npx wrangler d1 execute chorotate-production --remote --file <new-private-bootstrap-sql-path>
+   ```
+
+   For an existing bootstrapped database, apply only a newly generated update-only private SQL file. Never apply `seed/chorotate-local.template.sql` remotely and do not use `--command` with contact values. If import fails, D1 returns the database to its original state; retain the sanitized error category and do not blindly retry until the cause is known.
+4. With the four exported household timezone/week-start/evening/morning values still present, run `npm run operator:d1:verify`. It captures Wrangler JSON internally and emits only pass/fail check names. It requires authenticated Cloudflare access to `chorotate-production`, verifies the exact `0001`–`0008` migration names, sole ChoRotate household and exact configured clocks/boundaries, four exact member profiles/distinct identity mappings/sendable contacts, exactly two named chores, accepted rotation anchors/offsets/eight ordered members with no extras, and no duplicate logical outbox occurrences. It never invokes Textbelt. Missing/mismatched configuration or malformed/unconsented/suppressed active contacts fail readiness without printing values. A deliberate opt-out remains correctly non-sendable; record that approved exception rather than weakening D1 state or forcing a send.
 5. Run the complete local gate: `npm run check:release` from a clean checkout. Confirm `git status --porcelain=v1` remains empty.
-6. Build and inspect without deployment: `npm run deploy:production:dry-run`. An unqualified `npm run deploy` always refuses before build or upload.
-7. Deploy only after approval. Set `PRODUCTION_DEPLOY_CONFIRM=chorotate-production`, then run `npm run deploy:production`. This command is intentionally absent from CI and fails before build/upload when confirmation or any production input is invalid.
+6. Confirm `PRODUCTION_REMINDER_SMS_ENABLED=false`, then build and inspect without deployment: `npm run deploy:production:dry-run`. An unqualified `npm run deploy` always refuses before build or upload.
+7. Record explicit approval for the initial fail-closed deployment. Set `PRODUCTION_DEPLOY_CONFIRM=chorotate-production`, then run `npm run deploy:production`. This command is intentionally absent from CI and fails before build/upload when confirmation or any production input is invalid. The first version may reject requests until the three Worker secrets exist, but SMS remains disabled and cannot plan or call Textbelt.
+8. Confirm the deployed HTTPS host exactly matches `PRODUCTION_CANONICAL_ORIGIN`. Configure the Google OAuth origin and `/api/auth/callback/google`, then enter the three secrets interactively with the commands above. Each `wrangler secret put` immediately deploys a new version; record each version/status and complete all three without routing a production sign-in between them. Run `npx wrangler secret list --env production` and verify only the approved names `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` are present.
+9. Rerun `npm run operator:d1:verify`, confirm `PRODUCTION_REMINDER_SMS_ENABLED=false`, and begin the non-sending browser/remote smoke below.
 
 ## 4. Cron and production verification
 
-The Worker cron is `*/15 * * * *`. After deployment, verify that exact trigger in Cloudflare and record its status without copying sensitive logs. Invoke only a controlled non-sending validation when possible, then rerun `npm run operator:d1:verify`. Confirm one claim/attempt per logical assignment-version/phase/recipient occurrence. Scheduled infrastructure failure logs the fixed redacted message and rejects so the platform observes failure. Never manually requeue `delivery_unknown`, force duplicate real messages, or use catch-up work that can consume the next day's slot.
+The Worker cron is `*/15 * * * *`. After deployment, verify that exact trigger in Cloudflare and record its status without copying sensitive logs. With `REMINDER_SMS_ENABLED=false`, every invocation returns before planning or transport construction; keep it false while preparing the schedule and completing all non-sending checks. Rerun `npm run operator:d1:verify`. Never manually requeue `delivery_unknown`, force duplicate real messages, or use catch-up work that can consume the next day's slot.
 
 Final external smoke checklist:
 
-- Sign in with one exact allowlisted Google identity; verify a non-allowlisted identity is denied and an allowlist removal denies the next request.
+- Sign in with one exact allowlisted Google identity. On a fresh database, use the visible **Prepare schedule** action once and verify the independent four-period horizon appears. Verify a non-allowlisted identity is denied and an allowlist removal denies the next request.
 - Confirm the active allowlist row is bound to that Better Auth user id. An unbound/backfill row must not authorize an existing session; account creation recovery may only atomically claim the exact normalized active identity for the same auth user.
 - Verify Now, Mine, Household, and History at phone and desktop widths in light and dark modes.
 - Against remote D1, retain sanitized evidence for migration order, materialization, direct reassignment, atomic swap, stale conflict, immutable audit triggers, outbox uniqueness, contact no-send states, and session revocation.
-- Only with explicit approval naming the low-risk day, consenting recipient, and quota owner, allow the deployed application to send **at most one** controlled live Textbelt reminder. Do not call Textbelt directly from a shell. Verify one-segment ChoRotate/range/STOP content, `textId`/quota/status evidence when available, sanitized/phone-redacted fields, and D1 duplicate suppression by inspection or non-sending checks; never repeat the live provider call. Provider acceptance does not prove handset delivery, and an ambiguous timeout remains terminal with no retry.
+- Leave `PRODUCTION_REMINDER_SMS_ENABLED=false` unless a human explicitly approves either a bounded one-message smoke or recurring reminder launch. For the optional smoke, record the low-risk day, consenting recipient, and quota owner; set the value to `true`, deploy the approved version, allow exactly one due Cron occurrence, then immediately set it back to `false` and redeploy. Do not call Textbelt directly from a shell. Verify one-segment ChoRotate/range/STOP content, `textId`/quota/status evidence when available, sanitized/phone-redacted fields, and D1 duplicate suppression; never repeat the occurrence. Provider acceptance does not prove handset delivery, and an ambiguous timeout remains terminal with no retry. Enabling recurring reminders afterward is a separate explicit launch approval.
 - Verify HTTPS origin/cookies, Google callback, Worker logs (no secret values), observability, and cron health.
 
 These live Google, remote D1, live Textbelt, and production deployment checks cannot truthfully pass in credential-free local CI. A live smoke also cannot prove exactly-once delivery across an ambiguous provider timeout.
@@ -164,4 +187,4 @@ On any failed gate, record the command, UTC time, exit status, affected non-secr
 
 ## 6. Next steps
 
-Keep this runbook aligned with `SC-01`, `SC-03`, `SC-10`, and `SC-11`. Do not perform a live Textbelt send until all credential-free gates and remote D1 verification pass and the specific one-segment smoke is deliberately approved.
+Keep this runbook aligned with `SC-01`, `SC-03`, `SC-10`, and `SC-11`. Keep SMS disabled unless all credential-free gates and remote D1 verification pass and a specific bounded smoke or recurring launch is deliberately approved.

@@ -22,6 +22,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint --config scripts/eslint.config.mjs .",
+    "operator:bootstrap:prepare": "node scripts/operator-contact-config.mjs --bootstrap",
     "operator:contacts:prepare": "node scripts/operator-contact-config.mjs",
     "operator:contacts:test": "node --test scripts/operator-contact-config.test.mjs",
     "operator:d1:verify": "node scripts/verify-production-d1.mjs",

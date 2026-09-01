@@ -21,6 +21,7 @@ const inputNames = [
   "PRODUCTION_HOUSEHOLD_WEEK_START",
   "PRODUCTION_OWNER_EMAIL",
   "PRODUCTION_ALLOWED_EMAILS",
+  "PRODUCTION_REMINDER_SMS_ENABLED",
   "PRODUCTION_REMINDER_BATCH_SIZE",
   "PRODUCTION_REMINDER_LEASE_MILLISECONDS",
   "PRODUCTION_REMINDER_MAX_ATTEMPTS",
@@ -118,6 +119,10 @@ const reminderBatchSize = boundedInteger(
   1,
   100,
 );
+const reminderSmsEnabled = values.PRODUCTION_REMINDER_SMS_ENABLED;
+if (reminderSmsEnabled !== "true" && reminderSmsEnabled !== "false") {
+  invalid.add("PRODUCTION_REMINDER_SMS_ENABLED");
+}
 const reminderLeaseMilliseconds = boundedInteger(
   "PRODUCTION_REMINDER_LEASE_MILLISECONDS",
   6_000,
@@ -231,6 +236,7 @@ try {
     HOUSEHOLD_WEEK_START: values.PRODUCTION_HOUSEHOLD_WEEK_START,
     OWNER_EMAIL: ownerEmail,
     ALLOWED_EMAILS: allowedEmails.join(","),
+    REMINDER_SMS_ENABLED: reminderSmsEnabled,
     REMINDER_BATCH_SIZE: String(reminderBatchSize),
     REMINDER_LEASE_MILLISECONDS: String(reminderLeaseMilliseconds),
     REMINDER_MAX_ATTEMPTS: String(reminderMaxAttempts),

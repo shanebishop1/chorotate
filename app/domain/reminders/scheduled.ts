@@ -18,6 +18,7 @@ export function createScheduledReminderDispatcher(
   runtime: CloudflareRuntimeContext,
 ) => Promise<void> {
   return async (controller, runtime) => {
+    if (!runtime.config.reminders.smsEnabled) return;
     const clock = options.now ?? (() => new Date());
     const planningTime = clock();
     const database = runtime.env.DB;
