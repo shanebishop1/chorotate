@@ -34,7 +34,7 @@ This runbook performs setup and release operations. CI runs only the credential-
    Confirm the command reports the contiguous canonical set `0001_domain_schema.sql` through `0008_sms_occurrence_times.sql`. Migration `0004_better_auth.sql` is generated, not hand-authored. The pinned command is `npm run auth:schema:generate` (`auth@1.7.2 generate --adapter kysely --dialect sqlite`); `npm run auth:schema:check` regenerates into an operating-system temporary directory and byte-compares it without changing the repository. Migrations `0007` and `0008` add D1-only SMS contacts, chore-specific periods, Textbelt outbox evidence, and evening/morning occurrence times.
 
 4. `seed/chorotate-local.template.sql` is a test-only structural seed with deliberately unusable identities and non-sendable contacts. Apply it only to local D1 with `npm run seed:local`; never edit it with real values.
-5. Run `npm run operator:contacts:test` and `npm run operator:d1:verify:dry-run`. These credential-free checks prove input validation, private SQL generation, redacted remote-check command shape, and the runtime's existing missing/malformed/unconsented/suppressed no-send contract without contacting Cloudflare or Textbelt.
+5. Run `npm run operator:contacts:test`, `npm run operator:d1:test`, and `npm run operator:d1:verify:dry-run`. These credential-free checks prove input validation, private SQL generation, fixed/redacted remote command shapes, temporary-config permissions and cleanup, and the runtime's existing missing/malformed/unconsented/suppressed no-send contract without contacting Cloudflare or Textbelt.
 6. Run `npm run doctor`, `npm run check`, `npm run build`, and `npm run test:browser`.
 
 ## 2. Provider and production inputs
@@ -129,7 +129,7 @@ export PRODUCTION_REMINDER_RETRY_BASE_MILLISECONDS='60000'
 export PRODUCTION_REMINDER_RETRY_MAX_MILLISECONDS='900000'
 ```
 
-The production script validates all current names before building, injects the D1 UUID and plain bindings into a mode-0600 temporary Wrangler config, selects `CLOUDFLARE_ENV=production` for the Vite build, redacts injected values from child output, and deletes temporary/emitted deploy configs. `PRODUCTION_REMINDER_SMS_ENABLED` accepts only `true` or `false`; keep it `false` through migration, deployment, OAuth, materialization, and non-sending smoke. When false, Cron returns before planning, transport construction, or dispatch. Reminder bounds are: batch `1–100`, lease `6000–3600000` ms, attempts `1–20`, provider timeout `1000–30000` ms, retry base `1000–3600000` ms, and retry max `1000–86400000` ms. Retry max must be at least retry base, and lease must be at least `batch × provider timeout + 5000` ms. D1 `households.reminder_evening_local_time` and `reminder_morning_local_time` are authoritative and use `HH:mm` (`00:00`–`23:59`). D1 chores must retain Trash Friday (`5`) and Dishwasher Monday (`1`) boundaries. Run `npm run doctor`; production placeholders and non-contiguous migrations fail the check.
+The production deploy and D1 operator scripts validate the D1 UUID, inject it only into a mode-0600 operating-system temporary Wrangler config, remove it from the child environment, address the configured `DB` binding, disable Wrangler disk logs, redact injected values and private paths from successful migration output, withhold SQL and failed provider output, and remove the temporary config in `finally`. The deploy script additionally selects `CLOUDFLARE_ENV=production` for the Vite build and deletes the emitted deploy config. Never replace these repository wrappers with a direct production D1 Wrangler command: the tracked config intentionally cannot resolve production D1. `PRODUCTION_REMINDER_SMS_ENABLED` accepts only `true` or `false`; keep it `false` through migration, deployment, OAuth, materialization, and non-sending smoke. When false, Cron returns before planning, transport construction, or dispatch. Reminder bounds are: batch `1–100`, lease `6000–3600000` ms, attempts `1–20`, provider timeout `1000–30000` ms, retry base `1000–3600000` ms, and retry max `1000–86400000` ms. Retry max must be at least retry base, and lease must be at least `batch × provider timeout + 5000` ms. D1 `households.reminder_evening_local_time` and `reminder_morning_local_time` are authoritative and use `HH:mm` (`00:00`–`23:59`). D1 chores must retain Trash Friday (`5`) and Dishwasher Monday (`1`) boundaries. Run `npm run doctor`; production placeholders and non-contiguous migrations fail the check.
 
 ## 3. Migrate, smoke, and deploy
 
@@ -137,9 +137,9 @@ The production script validates all current names before building, injects the D
 2. Preview migration state, then apply to the named remote database only after review:
 
    ```sh
-    npx wrangler d1 migrations list chorotate-production --remote
-    npx wrangler d1 migrations apply chorotate-production --remote
-    npx wrangler d1 migrations list chorotate-production --remote
+     npm run operator:d1:migrations:list
+     npm run operator:d1:migrations:apply
+     npm run operator:d1:migrations:list
     ```
 
    Stop if the first preview is unexpected or the final list does not show `0001` through `0008` applied in order. Never edit migration history to force success.
@@ -155,10 +155,10 @@ The production script validates all current names before building, injects the D
      --week-start "$PRODUCTION_HOUSEHOLD_WEEK_START" \
      --evening-time "$PRODUCTION_REMINDER_EVENING_LOCAL_TIME" \
      --morning-time "$PRODUCTION_REMINDER_MORNING_LOCAL_TIME"
-   npx wrangler d1 execute chorotate-production --remote --file <new-private-bootstrap-sql-path>
+    npm run operator:d1:execute -- --file <new-private-bootstrap-sql-path>
    ```
 
-   For an existing bootstrapped database, apply only a newly generated update-only private SQL file. Never apply `seed/chorotate-local.template.sql` remotely and do not use `--command` with contact values. If import fails, D1 returns the database to its original state; retain the sanitized error category and do not blindly retry until the cause is known.
+   For an existing bootstrapped database, apply only a newly generated update-only private SQL file with the same `npm run operator:d1:execute -- --file <new-private-sql-path>` wrapper. The wrapper accepts exactly `--file` with a mode-restricted regular `.sql` file outside the repository; it refuses arbitrary commands and repository-contained or permissive paths. Never apply `seed/chorotate-local.template.sql` remotely and do not use `--command` with contact values. If import fails, D1 returns the database to its original state; retain the sanitized error category and do not blindly retry until the cause is known.
 4. With the four exported household timezone/week-start/evening/morning values still present, run `npm run operator:d1:verify`. It captures Wrangler JSON internally and emits only pass/fail check names. It requires authenticated Cloudflare access to `chorotate-production`, verifies the exact `0001`–`0008` migration names, sole ChoRotate household and exact configured clocks/boundaries, four exact member profiles/distinct identity mappings/sendable contacts, exactly two named chores, accepted rotation anchors/offsets/eight ordered members with no extras, and no duplicate logical outbox occurrences. It never invokes Textbelt. Missing/mismatched configuration or malformed/unconsented/suppressed active contacts fail readiness without printing values. A deliberate opt-out remains correctly non-sendable; record that approved exception rather than weakening D1 state or forcing a send.
 5. Run the complete local gate: `npm run check:release` from a clean checkout. Confirm `git status --porcelain=v1` remains empty.
 6. Confirm `PRODUCTION_REMINDER_SMS_ENABLED=false`, then build and inspect without deployment: `npm run deploy:production:dry-run`. An unqualified `npm run deploy` always refuses before build or upload.
