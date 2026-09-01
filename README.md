@@ -43,13 +43,14 @@ Install Chromium once with `npm run test:browser:install` if Playwright requests
 
 ## Deployment inputs
 
-Exact member emails and D1-only E.164 contacts/consent/suppression state, household timezone and optional reminder-time overrides, deployment domain, Google credentials, Better Auth secret, and Cloudflare D1 binding are operator-supplied deployment inputs. Textbelt uses the fixed public key `textbelt`; there is no reminder-provider secret. See the [security contract](docs/operations/security.md), [operator runbook](docs/operations/operator-runbook.md), and [acceptance-evidence matrix](docs/operations/mvp-acceptance-evidence.md).
+Exact member emails and D1-only E.164 contacts/consent/suppression state, household timezone and reminder times, deployment domain, Google credentials, Better Auth secret, and Cloudflare D1 binding are operator-supplied deployment inputs. A fresh production D1 database must use the private first-run `operator:bootstrap:prepare` workflow after migrations; later identity/contact changes use `operator:contacts:prepare`. Production deploys start with `PRODUCTION_REMINDER_SMS_ENABLED=false`, which makes Cron return before planning or transport construction; enabling one smoke or recurring reminders requires separate explicit approval. Textbelt uses the fixed public key `textbelt`; there is no reminder-provider secret. See the [security contract](docs/operations/security.md), [operator runbook](docs/operations/operator-runbook.md), and [acceptance-evidence matrix](docs/operations/mvp-acceptance-evidence.md).
 
 `npm run deploy` is intentionally blocked. Production dry-runs and deployments use the named Wrangler `production` environment through the validated scripts documented in the operator runbook.
 
 ## Local household seed
 
-Use `npm run operator:contacts:prepare` with mode-`0600` input/output paths outside
-the repository to prepare exact emails and E.164/consent/suppression updates. The
-tool prints category counts, not values. Apply the generated private SQL only after
-migrations `0001`–`0008`; then follow the runbook's redacted local/remote checks.
+Use `npm run operator:bootstrap:prepare` for a fresh migrated production database
+or `npm run operator:contacts:prepare` for later exact-email/contact updates. Both
+require mode-`0600` input/output paths outside the repository and print category
+counts, not values. Apply generated private SQL only after migrations `0001`–`0008`,
+then follow the runbook's redacted local/remote checks.

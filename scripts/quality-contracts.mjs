@@ -187,7 +187,8 @@ check(
   !/(?:PHONE|E164|CONTACT)/.test(environmentContract),
 );
 const operatorContactTool = read("scripts/operator-contact-config.mjs");
-const remoteD1Verification = read("scripts/verify-production-d1.mjs");
+const remoteD1Verification = `${read("scripts/verify-production-d1.mjs")}\n${read("scripts/production-d1-contract.mjs")}`;
+const scheduledReminders = read("app/domain/reminders/scheduled.ts");
 check(
   "operator contact preparation keeps private files outside the repository",
   /outsideRepository\(inputPath\)/.test(operatorContactTool) &&
@@ -196,9 +197,36 @@ check(
     /0o600/.test(operatorContactTool),
 );
 check(
+  "fresh production bootstrap is explicit, complete, and assignment-safe",
+  packageJson.scripts?.["operator:bootstrap:prepare"] ===
+    "node scripts/operator-contact-config.mjs --bootstrap" &&
+    /buildBootstrapSql/.test(operatorContactTool) &&
+    /operator_bootstrap_assert/.test(operatorContactTool) &&
+    [
+      "INSERT INTO households",
+      "INSERT INTO members",
+      "INSERT INTO allowlisted_identities",
+      "INSERT INTO chores",
+      "INSERT INTO rotation_configs",
+      "INSERT INTO rotation_config_members",
+    ].every((statement) => operatorContactTool.includes(statement)) &&
+    !operatorContactTool.includes("INSERT INTO weekly_assignments"),
+);
+check(
+  "SMS rollout is fail-closed until an explicit production enable",
+  /"REMINDER_SMS_ENABLED":\s*"false"/.test(read("wrangler.jsonc")) &&
+    /PRODUCTION_REMINDER_SMS_ENABLED/.test(productionDeploy) &&
+    /if \(!runtime\.config\.reminders\.smsEnabled\) return/.test(
+      scheduledReminders,
+    ),
+);
+check(
   "remote D1 verification is contact-redacted and non-sending",
   /--remote/.test(remoteD1Verification) &&
     /exact_active_identities/.test(remoteD1Verification) &&
+    /exact_active_members/.test(remoteD1Verification) &&
+    /exact_identity_members/.test(remoteD1Verification) &&
+    /expected_rotation_members/.test(remoteD1Verification) &&
     /'member-a', 'member-b', 'member-c', 'member-d'/.test(remoteD1Verification) &&
     /missing_contacts/.test(remoteD1Verification) &&
     /duplicate_occurrences/.test(remoteD1Verification) &&

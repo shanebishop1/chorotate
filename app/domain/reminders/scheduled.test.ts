@@ -5,6 +5,30 @@ import { validTestEnvironment } from "../../runtime/test-fixtures";
 import { createScheduledReminderDispatcher } from "./scheduled";
 
 describe("scheduled reminders", () => {
+  it("does not plan, construct transport, or dispatch while SMS is disabled", async () => {
+    const plan = vi.fn();
+    const createTransport = vi.fn();
+    const createDispatcher = vi.fn();
+    const scheduled = createScheduledReminderDispatcher({
+      plan,
+      createTransport,
+      createDispatcher,
+    });
+    const runtime = createCloudflareRuntimeContext(
+      {
+        ...validTestEnvironment(),
+        REMINDER_SMS_ENABLED: "false",
+      } as Parameters<typeof createCloudflareRuntimeContext>[0],
+      {} as ExecutionContext,
+    );
+
+    await scheduled({ scheduledTime: 123 } as ScheduledController, runtime);
+
+    expect(plan).not.toHaveBeenCalled();
+    expect(createTransport).not.toHaveBeenCalled();
+    expect(createDispatcher).not.toHaveBeenCalled();
+  });
+
   it("wires fixed public Textbelt transport without secret or email config", async () => {
     const planningTime = new Date("2026-03-08T09:00:00.000Z");
     const claimTime = new Date("2026-03-08T09:01:00.000Z");

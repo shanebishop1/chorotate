@@ -29,6 +29,7 @@ const config = {
     allowedEmails: ["member-d@example.test"],
   },
   reminders: {
+    smsEnabled: true,
     batchSize: 25,
     leaseMilliseconds: 300_000,
     maxAttempts: 5,

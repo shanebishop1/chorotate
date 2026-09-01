@@ -24,6 +24,7 @@ export const plainBindingNames = [
   "HOUSEHOLD_WEEK_START",
   "OWNER_EMAIL",
   "ALLOWED_EMAILS",
+  "REMINDER_SMS_ENABLED",
   "REMINDER_BATCH_SIZE",
   "REMINDER_LEASE_MILLISECONDS",
   "REMINDER_MAX_ATTEMPTS",
@@ -45,6 +46,7 @@ export interface PlainEnvironmentBindings {
   HOUSEHOLD_WEEK_START: string;
   OWNER_EMAIL: string;
   ALLOWED_EMAILS: string;
+  REMINDER_SMS_ENABLED: string;
   REMINDER_BATCH_SIZE: string;
   REMINDER_LEASE_MILLISECONDS: string;
   REMINDER_MAX_ATTEMPTS: string;
@@ -82,6 +84,7 @@ export interface RuntimeConfig {
 }
 
 export interface ReminderRuntimeConfig {
+  smsEnabled: boolean;
   batchSize: number;
   leaseMilliseconds: number;
   maxAttempts: number;
@@ -137,6 +140,19 @@ function boundedIntegerBinding(
     return minimum;
   }
   return parsed;
+}
+
+function booleanBinding(
+  environment: Record<string, unknown>,
+  name: string,
+  invalidBindings: string[],
+): boolean {
+  const value = requiredString(environment, name, invalidBindings);
+  if (value !== "true" && value !== "false") {
+    invalidBindings.push(name);
+    return false;
+  }
+  return value === "true";
 }
 
 function isValidTimeZone(timeZone: string): boolean {
@@ -252,6 +268,11 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
     invalidBindings.push("ALLOWED_EMAILS");
   }
 
+  const smsEnabled = booleanBinding(
+    raw,
+    "REMINDER_SMS_ENABLED",
+    invalidBindings,
+  );
   const batchSize = boundedIntegerBinding(
     raw,
     "REMINDER_BATCH_SIZE",
@@ -352,6 +373,7 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
       allowedEmails,
     },
     reminders: {
+      smsEnabled,
       batchSize,
       leaseMilliseconds,
       maxAttempts,

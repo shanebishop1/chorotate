@@ -15,6 +15,16 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const e164Pattern = /^\+[1-9]\d{1,14}$/;
 const consentStatuses = new Set(["not_recorded", "consented", "revoked"]);
 const suppressionStatuses = new Set(["not_suppressed", "suppressed"]);
+const weekdays = new Map([
+  ["sunday", 0],
+  ["monday", 1],
+  ["tuesday", 2],
+  ["wednesday", 3],
+  ["thursday", 4],
+  ["friday", 5],
+  ["saturday", 6],
+]);
+const localTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 /** @param {unknown} input */
@@ -165,7 +175,103 @@ export function buildContactSql(input) {
       })
       .join("\n");
 
-  return `-- PRIVATE OPERATOR INPUT. Contains sensitive contact data. Do not commit or log.\nPRAGMA foreign_keys = ON;\nCREATE TEMP TABLE operator_identity_assert (matched_rows INTEGER CHECK (matched_rows = 4));\nUPDATE allowlisted_identities\nSET email_normalized = CASE member_id\n${emailCases}\n  END\nWHERE household_id = ${sqlString(input.householdId)} AND member_id IN (${ids});\nINSERT INTO operator_identity_assert VALUES (changes());\nCREATE TEMP TABLE operator_contact_assert (matched_rows INTEGER CHECK (matched_rows = 4));\nUPDATE members\nSET sms_phone_e164 = CASE id\n${memberCases("phoneE164")}\n  END,\n    sms_consent_status = CASE id\n${memberCases("consent")}\n  END,\n    sms_suppression_status = CASE id\n${memberCases("suppression")}\n  END,\n    sms_contact_updated_at = ${sqlString(input.recordedAt)}\nWHERE household_id = ${sqlString(input.householdId)} AND id IN (${ids});\nINSERT INTO operator_contact_assert VALUES (changes());\nDROP TABLE operator_contact_assert;\nDROP TABLE operator_identity_assert;\n`;
+  return `-- PRIVATE OPERATOR INPUT. Contains sensitive contact data. Do not commit or log.\nPRAGMA foreign_keys = ON;\nCREATE TEMP TABLE operator_identity_assert (matched_rows INTEGER CHECK (matched_rows = 4));\n-- An exact-email change invalidates the old authorization binding and sessions.\nDELETE FROM "session"\nWHERE "userId" IN (\n  SELECT auth_user_id\n  FROM allowlisted_identities\n  WHERE household_id = ${sqlString(input.householdId)}\n    AND member_id IN (${ids})\n    AND auth_user_id IS NOT NULL\n    AND email_normalized <> CASE member_id\n${emailCases}\n      END\n);\nUPDATE allowlisted_identities\nSET auth_user_id = CASE\n      WHEN email_normalized <> CASE member_id\n${emailCases}\n        END THEN NULL\n      ELSE auth_user_id\n    END,\n    email_normalized = CASE member_id\n${emailCases}\n  END\nWHERE household_id = ${sqlString(input.householdId)} AND member_id IN (${ids});\nINSERT INTO operator_identity_assert VALUES (changes());\nCREATE TEMP TABLE operator_contact_assert (matched_rows INTEGER CHECK (matched_rows = 4));\nUPDATE members\nSET sms_phone_e164 = CASE id\n${memberCases("phoneE164")}\n  END,\n    sms_consent_status = CASE id\n${memberCases("consent")}\n  END,\n    sms_suppression_status = CASE id\n${memberCases("suppression")}\n  END,\n    sms_contact_updated_at = ${sqlString(input.recordedAt)}\nWHERE household_id = ${sqlString(input.householdId)} AND id IN (${ids});\nINSERT INTO operator_contact_assert VALUES (changes());\nDROP TABLE operator_contact_assert;\nDROP TABLE operator_identity_assert;\n`;
+}
+
+/**
+ * @param {unknown} settings
+ * @returns {{timeZone: string, weekStart: string, weekStartNumber: number, eveningTime: string, morningTime: string}}
+ */
+function validateBootstrapSettings(settings) {
+  /** @type {string[]} */
+  const failures = [];
+  if (settings === null || typeof settings !== "object") {
+    throw new Error("Invalid production bootstrap settings: document shape");
+  }
+  const input = /** @type {Record<string, unknown>} */ (settings);
+  const timeZone = input.timeZone;
+  const weekStart = input.weekStart;
+  const eveningTime = input.eveningTime;
+  const morningTime = input.morningTime;
+  if (
+    typeof timeZone !== "string" ||
+    timeZone !== timeZone.trim() ||
+    timeZone.length === 0 ||
+    timeZone.length > 100
+  ) {
+    failures.push("IANA time zone");
+  } else {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone }).format();
+    } catch {
+      failures.push("IANA time zone");
+    }
+  }
+  if (typeof weekStart !== "string" || !weekdays.has(weekStart)) {
+    failures.push("household week start");
+  }
+  if (typeof eveningTime !== "string" || !localTimePattern.test(eveningTime)) {
+    failures.push("evening reminder time");
+  }
+  if (typeof morningTime !== "string" || !localTimePattern.test(morningTime)) {
+    failures.push("morning reminder time");
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `Invalid production bootstrap settings: ${[...new Set(failures)].sort().join(", ")}`,
+    );
+  }
+  return {
+    timeZone: /** @type {string} */ (timeZone),
+    weekStart: /** @type {string} */ (weekStart),
+    weekStartNumber: /** @type {number} */ (
+      weekdays.get(/** @type {string} */ (weekStart))
+    ),
+    eveningTime: /** @type {string} */ (eveningTime),
+    morningTime: /** @type {string} */ (morningTime),
+  };
+}
+
+/**
+ * @param {ReturnType<typeof validateContactInput>} input
+ * @param {unknown} settings
+ */
+export function buildBootstrapSql(input, settings) {
+  const bootstrap = validateBootstrapSettings(settings);
+  const members = [...input.members].sort(
+    (left, right) =>
+      expectedMemberIds.indexOf(left.id) - expectedMemberIds.indexOf(right.id),
+  );
+  const displayNames = new Map([
+    ["member-a", "Member A"],
+    ["member-b", "Member B"],
+    ["member-c", "Member C"],
+    ["member-d", "Member D"],
+  ]);
+  const memberRows = members
+    .map(
+      (member) =>
+        `  (${sqlString(member.id)}, ${sqlString(input.householdId)}, ${sqlString(displayNames.get(member.id) ?? member.id)}, 1, ${sqlString(input.recordedAt)}, ${member.phoneE164 === null ? "NULL" : sqlString(member.phoneE164)}, ${sqlString(member.consent)}, ${sqlString(member.suppression)}, ${sqlString(input.recordedAt)})`,
+    )
+    .join(",\n");
+  const identityRows = members
+    .map(
+      (member) =>
+        `  (${sqlString(`identity-${member.id}`)}, ${sqlString(input.householdId)}, ${sqlString(member.id)}, ${sqlString(member.email)}, NULL, 1, ${sqlString(input.recordedAt)})`,
+    )
+    .join(",\n");
+  const rotationMemberRows = [
+    ...expectedMemberIds.map(
+      (memberId, position) =>
+        `  (${sqlString(input.householdId)}, 'rotation-trash-2026-08-28', ${sqlString(memberId)}, ${position})`,
+    ),
+    ...expectedMemberIds.map(
+      (memberId, position) =>
+        `  (${sqlString(input.householdId)}, 'rotation-dishwasher-2026-08-31', ${sqlString(memberId)}, ${position})`,
+    ),
+  ].join(",\n");
+
+  return `-- PRIVATE OPERATOR INPUT. Contains sensitive identity/contact data. Do not commit or log.\n-- First-run only: refuses any pre-existing ChoRotate production structure.\nPRAGMA foreign_keys = ON;\nCREATE TEMP TABLE operator_bootstrap_assert (existing_rows INTEGER CHECK (existing_rows = 0));\nINSERT INTO operator_bootstrap_assert\nSELECT\n+  (SELECT count(*) FROM households WHERE id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM members WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM allowlisted_identities WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM chores WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM rotation_configs WHERE household_id = ${sqlString(input.householdId)});\nINSERT INTO households\n  (id,name,time_zone,week_start,created_at,reminder_evening_local_time,reminder_morning_local_time)\nVALUES\n  (${sqlString(input.householdId)}, 'ChoRotate', ${sqlString(bootstrap.timeZone)}, ${bootstrap.weekStartNumber}, ${sqlString(input.recordedAt)}, ${sqlString(bootstrap.eveningTime)}, ${sqlString(bootstrap.morningTime)});\nINSERT INTO members\n  (id,household_id,display_name,active,created_at,sms_phone_e164,sms_consent_status,sms_suppression_status,sms_contact_updated_at)\nVALUES\n${memberRows};\nINSERT INTO allowlisted_identities\n  (id,household_id,member_id,email_normalized,auth_user_id,active,created_at)\nVALUES\n${identityRows};\nINSERT INTO chores\n  (id,household_id,name,active,created_at,instructions,ownership_start_weekday)\nVALUES\n  ('trash', ${sqlString(input.householdId)}, 'Trash', 1, ${sqlString(input.recordedAt)}, 'Take the trash out and replace bags.', 5),\n  ('dishwasher', ${sqlString(input.householdId)}, 'Dishwasher', 1, ${sqlString(input.recordedAt)}, 'Empty the completed dishwasher.', 1);\nINSERT INTO rotation_configs\n  (id,household_id,chore_id,effective_from,rotation_offset,created_at)\nVALUES\n  ('rotation-trash-2026-08-28', ${sqlString(input.householdId)}, 'trash', '2026-08-28', 0, ${sqlString(input.recordedAt)}),\n  ('rotation-dishwasher-2026-08-31', ${sqlString(input.householdId)}, 'dishwasher', '2026-08-31', 2, ${sqlString(input.recordedAt)});\nINSERT INTO rotation_config_members\n  (household_id,rotation_config_id,member_id,position)\nVALUES\n${rotationMemberRows};\nDROP TABLE operator_bootstrap_assert;\n`;
 }
 
 /** @param {string} path */
@@ -180,16 +286,38 @@ function outsideRepository(path) {
 
 async function main() {
   const args = process.argv.slice(2);
+  const bootstrap = args.includes("--bootstrap");
   const inputIndex = args.indexOf("--input");
   const outputIndex = args.indexOf("--output");
+  const timeZoneIndex = args.indexOf("--time-zone");
+  const weekStartIndex = args.indexOf("--week-start");
+  const eveningTimeIndex = args.indexOf("--evening-time");
+  const morningTimeIndex = args.indexOf("--morning-time");
+  const expectedLength = bootstrap ? 13 : 4;
   if (
+    args.length !== expectedLength ||
+    args.filter((argument) => argument === "--bootstrap").length !==
+      (bootstrap ? 1 : 0) ||
+    args.filter((argument) => argument === "--input").length !== 1 ||
+    args.filter((argument) => argument === "--output").length !== 1 ||
     inputIndex === -1 ||
     outputIndex === -1 ||
     !args[inputIndex + 1] ||
-    !args[outputIndex + 1]
+    !args[outputIndex + 1] ||
+    (bootstrap &&
+      (timeZoneIndex === -1 ||
+        weekStartIndex === -1 ||
+        eveningTimeIndex === -1 ||
+        morningTimeIndex === -1 ||
+        !args[timeZoneIndex + 1] ||
+        !args[weekStartIndex + 1] ||
+        !args[eveningTimeIndex + 1] ||
+        !args[morningTimeIndex + 1]))
   ) {
     throw new Error(
-      "Usage: node scripts/operator-contact-config.mjs --input <private-json-path> --output <new-private-sql-path>",
+      bootstrap
+        ? "Usage: node scripts/operator-contact-config.mjs --bootstrap --input <private-json-path> --output <new-private-sql-path> --time-zone <iana-zone> --week-start <weekday> --evening-time <HH:mm> --morning-time <HH:mm>"
+        : "Usage: node scripts/operator-contact-config.mjs --input <private-json-path> --output <new-private-sql-path>",
     );
   }
   const inputPath = await realpath(resolve(args[inputIndex + 1]));
@@ -207,19 +335,27 @@ async function main() {
   const input = validateContactInput(
     JSON.parse(await readFile(inputPath, "utf8")),
   );
+  const sql = bootstrap
+    ? buildBootstrapSql(input, {
+        timeZone: args[timeZoneIndex + 1],
+        weekStart: args[weekStartIndex + 1],
+        eveningTime: args[eveningTimeIndex + 1],
+        morningTime: args[morningTimeIndex + 1],
+      })
+    : buildContactSql(input);
   const output = await open(
     outputPath,
     constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
     0o600,
   );
   try {
-    await output.writeFile(buildContactSql(input), "utf8");
+    await output.writeFile(sql, "utf8");
   } finally {
     await output.close();
   }
   const summary = summarizeContactReadiness(input);
   console.log(
-    `Prepared private D1 input without printing values: total=${summary.total}, sendable=${summary.sendable}, missing=${summary.missing}, unconsented=${summary.unconsented}, suppressed=${summary.suppressed}.`,
+    `Prepared private D1 ${bootstrap ? "bootstrap" : "contact update"} without printing values: total=${summary.total}, sendable=${summary.sendable}, missing=${summary.missing}, unconsented=${summary.unconsented}, suppressed=${summary.suppressed}.`,
   );
 }
 

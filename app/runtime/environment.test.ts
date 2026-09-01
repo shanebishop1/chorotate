@@ -94,6 +94,7 @@ describe("parseRuntimeConfig", () => {
       "test-only-google-client-secret",
     );
     expect(config.reminders).toEqual({
+      smsEnabled: true,
       batchSize: 25,
       leaseMilliseconds: 300_000,
       maxAttempts: 5,
@@ -115,6 +116,7 @@ describe("parseRuntimeConfig", () => {
       }),
     );
     expect(config.reminders).toEqual({
+      smsEnabled: true,
       batchSize: 4,
       leaseMilliseconds: 50_000,
       maxAttempts: 3,
@@ -141,6 +143,7 @@ describe("parseRuntimeConfig", () => {
   });
 
   it.each([
+    ["REMINDER_SMS_ENABLED", "yes"],
     ["REMINDER_BATCH_SIZE", "0"],
     ["REMINDER_LEASE_MILLISECONDS", "secret"],
     ["REMINDER_MAX_ATTEMPTS", "21"],
