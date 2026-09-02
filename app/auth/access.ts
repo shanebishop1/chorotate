@@ -88,8 +88,8 @@ export function createRequestAuthorizer(dependencies: {
   };
 }
 
-function trustedGoogleImage(value: string | undefined): string | undefined {
-  if (!value) return undefined;
+export function trustedGoogleImage(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
   try {
     const url = new URL(value);
     return url.protocol === "https:" &&

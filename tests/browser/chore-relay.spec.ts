@@ -182,6 +182,11 @@ test("profile control uses an available Google image and hides account actions",
     "src",
     "https://lh3.googleusercontent.com/a/profile-photo",
   );
+  const shanePeople = page.locator(".person-member-d");
+  expect(await shanePeople.count()).toBeGreaterThan(1);
+  await expect(shanePeople.locator("img")).toHaveCount(
+    await shanePeople.count(),
+  );
   await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
   const centering = await profile.evaluate((button) => {
     const control = button.getBoundingClientRect();
@@ -369,15 +374,26 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   await expect(dialog).not.toContainText(/Outgoing|Incoming/);
   await expect(dialog).toContainText("Current");
   await expect(dialog).toContainText("After swap");
+  await expect(dialog).not.toContainText("Both assignments update together");
+  await expect(dialog).not.toContainText("confirm as one operation");
   await expect(dialog).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(dialog).toContainText("Mon, Aug 31 – Sun, Sep 6");
-  const confirm = page.getByRole("button", { name: "Confirm atomic swap" });
+  const confirm = page.getByRole("button", { name: "Confirm", exact: true });
   await expect(confirm).toBeEnabled();
   const fit = await confirm.evaluate((button) => ({
     clientWidth: button.clientWidth,
     scrollWidth: button.scrollWidth,
   }));
   expect(fit.scrollWidth).toBeLessThanOrEqual(fit.clientWidth);
+  const position = await dialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2),
+      y: Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2),
+    };
+  });
+  expect(position.x).toBeLessThan(2);
+  expect(position.y).toBeLessThan(2);
 });
 
 test("stale recovery names refreshed ownership values and requires intentional retry", async ({

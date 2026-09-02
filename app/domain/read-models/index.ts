@@ -1,4 +1,4 @@
-import type { AuthorizedMember } from "../../auth/access";
+import { trustedGoogleImage, type AuthorizedMember } from "../../auth/access";
 import type { LocalDate } from "../contracts";
 import {
   addLocalDays,
@@ -52,13 +52,27 @@ export async function getActiveMembers(
   try {
     const result = await context.database
       .prepare(
-        `SELECT id, display_name, active FROM members
+        `SELECT id, display_name, active,
+                (SELECT u.image
+                 FROM allowlisted_identities AS ai
+                 INNER JOIN "user" AS u ON u.id = ai.auth_user_id
+                 WHERE ai.household_id = members.household_id
+                   AND ai.member_id = members.id
+                   AND ai.active = 1
+                 ORDER BY ai.id
+                 LIMIT 1) AS image_url
+         FROM members
          WHERE household_id = ? AND active = 1 ORDER BY display_name, id`,
       )
       .bind(household.id)
-      .all<{ id: unknown; display_name: unknown; active: unknown }>();
+      .all<{
+        id: unknown;
+        display_name: unknown;
+        active: unknown;
+        image_url: unknown;
+      }>();
     return result.results.map((row) =>
-      memberFromRow(row.id, row.display_name, row.active),
+      memberFromRow(row.id, row.display_name, row.active, row.image_url),
     );
   } catch (error) {
     if (error instanceof ReadModelError) throw error;
@@ -120,6 +134,7 @@ interface AssignmentRow {
   member_id: unknown;
   member_name: unknown;
   member_active: unknown;
+  member_image_url: unknown;
   version: unknown;
   source: unknown;
   sms_has_phone: unknown;
@@ -387,12 +402,15 @@ function memberFromRow(
   id: unknown,
   name: unknown,
   active: unknown,
+  image: unknown,
 ): ProjectedMember {
-  return {
+  const member: ProjectedMember = {
     id: stringValue(id),
     displayName: stringValue(name),
     active: activeValue(active),
   };
+  const imageUrl = trustedGoogleImage(image);
+  return imageUrl ? { ...member, imageUrl } : member;
 }
 
 function assignmentFromRow(
@@ -415,7 +433,12 @@ function assignmentFromRow(
       instructions: stringValue(row.chore_instructions),
       ownershipStartWeekday,
     },
-    member: memberFromRow(row.member_id, row.member_name, row.member_active),
+    member: memberFromRow(
+      row.member_id,
+      row.member_name,
+      row.member_active,
+      row.member_image_url,
+    ),
     version: integerValue(row.version),
     source: sourceValue(row.source),
     reminder: reminderStatus({
@@ -436,7 +459,16 @@ const assignmentSelect = `
          c.name AS chore_name, c.instructions AS chore_instructions,
          c.ownership_start_weekday,
          wa.member_id, m.display_name AS member_name,
-         m.active AS member_active, wa.version, wa.source,
+         m.active AS member_active,
+         (SELECT u.image
+          FROM allowlisted_identities AS ai
+          INNER JOIN "user" AS u ON u.id = ai.auth_user_id
+          WHERE ai.household_id = m.household_id
+            AND ai.member_id = m.id
+            AND ai.active = 1
+          ORDER BY ai.id
+          LIMIT 1) AS member_image_url,
+         wa.version, wa.source,
          (m.sms_phone_e164 IS NOT NULL) AS sms_has_phone,
          m.sms_consent_status, m.sms_suppression_status,
          evening.status AS evening_status,

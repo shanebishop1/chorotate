@@ -750,7 +750,9 @@ function ChangeDialog({
       ref={dialogRef}
       className="change-dialog"
       aria-labelledby="dialog-title"
-      aria-describedby="dialog-description"
+      aria-describedby={
+        dialog.kind === "reassign" ? "dialog-description" : undefined
+      }
       onCancel={(event) => {
         event.preventDefault();
         if (!pending) onClose();
@@ -765,11 +767,9 @@ function ChangeDialog({
                 ? `Reassign ${assignment?.chore.name ?? "chore"}`
                 : "Swap two turns"}
             </h2>
-            <p id="dialog-description">
-              {dialog.kind === "reassign"
-                ? formatPeriod(assignment?.period)
-                : "Both assignments update together—or neither does."}
-            </p>
+            {dialog.kind === "reassign" ? (
+              <p id="dialog-description">{formatPeriod(assignment?.period)}</p>
+            ) : null}
           </div>
           <button
             className="icon-button"
@@ -913,7 +913,7 @@ function ChangeDialog({
               ? "Saving…"
               : dialog.kind === "reassign"
                 ? "Confirm handoff"
-                : "Confirm atomic swap"}
+                : "Confirm"}
           </button>
         </footer>
       </fetcher.Form>
@@ -1004,9 +1004,6 @@ function SwapReview({
       <h3 id="swap-review-title">Review both swap legs</h3>
       <SwapLeg index={1} assignment={first} to={second.member} />
       <SwapLeg index={2} assignment={second} to={first.member} />
-      <p className="atomic-note">
-        <Icon name="lock" /> These two legs confirm as one operation.
-      </p>
     </section>
   );
 }

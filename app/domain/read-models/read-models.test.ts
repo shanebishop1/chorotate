@@ -337,6 +337,32 @@ describe("authorized schedule read models", () => {
     ]);
   });
 
+  it("projects trusted linked profile images across member and assignment views", async () => {
+    const db = database();
+    seedSchedule(db);
+    db.exec(`
+      INSERT INTO "user" (id,name,email,emailVerified,image,createdAt,updatedAt)
+      VALUES ('u1','Alice','alice@example.test',1,'https://lh3.googleusercontent.com/a/alice','2026-08-01','2026-08-01');
+      INSERT INTO allowlisted_identities
+        (id,household_id,member_id,email_normalized,auth_user_id,active,created_at)
+      VALUES ('identity-1','h1','m1','alice@example.test','u1',1,'2026-08-01');
+    `);
+
+    const members = await getActiveMembers(context(db), { request });
+    expect(members.find(({ id }) => id === "m1")?.imageUrl).toBe(
+      "https://lh3.googleusercontent.com/a/alice",
+    );
+    const household = await getHouseholdList(context(db), {
+      request,
+      now: new Date("2026-08-31T04:00:00Z"),
+      fromDate: "2026-08-28",
+      toDate: "2026-09-06",
+    });
+    expect(
+      household.items.find(({ member }) => member.id === "m1")?.member.imageUrl,
+    ).toBe("https://lh3.googleusercontent.com/a/alice");
+  });
+
   it("projects only redacted contact and reminder result evidence", async () => {
     const db = database();
     seedSchedule(db);

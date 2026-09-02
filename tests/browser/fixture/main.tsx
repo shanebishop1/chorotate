@@ -14,6 +14,9 @@ const members = ["Member A", "Member B", "Member C", "Member D"].map((displayNam
   id: displayName.toLowerCase(),
   displayName,
   active: true,
+  ...(displayName === "Member D"
+    ? { imageUrl: "https://lh3.googleusercontent.com/a/profile-photo" }
+    : {}),
 }));
 const periodStarts = {
   trash: ["2026-08-28", "2026-09-04", "2026-09-11", "2026-09-18"],

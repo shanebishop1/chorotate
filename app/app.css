@@ -1820,19 +1820,6 @@ select {
   text-transform: uppercase;
 }
 
-.atomic-note {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--positive) !important;
-  font-weight: 750;
-}
-
-.atomic-note .icon {
-  width: 15px;
-  height: 15px;
-}
-
 .simulation-control {
   margin-top: 17px;
   padding: 11px 12px;
@@ -2175,15 +2162,12 @@ select {
 
   .change-dialog {
     position: fixed;
-    inset: auto 0 0;
-    width: 100%;
-    max-width: none;
-    max-height: 92dvh;
-    margin: 0;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 23px 23px 0 0;
+    inset: 0;
+    width: calc(100% - 28px);
+    max-width: 560px;
+    max-height: calc(100dvh - 28px);
+    margin: auto;
+    border-radius: 16px;
   }
 
   .change-dialog form {
@@ -2995,10 +2979,6 @@ select {
     margin-left: auto;
   }
 
-  .change-dialog {
-    max-height: calc(100dvh - env(safe-area-inset-top));
-    border-radius: 17px 17px 0 0;
-  }
 }
 
 @media (max-width: 365px) {
