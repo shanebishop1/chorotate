@@ -33,6 +33,7 @@ const checks = [
   "planning:check",
   "operator:contacts:test",
   "operator:d1:test",
+  "deploy:production:test",
   "operator:d1:verify:dry-run",
   "build",
   "test:browser",

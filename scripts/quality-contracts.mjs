@@ -18,6 +18,7 @@ const lock = JSON.parse(read("package-lock.json"));
 const ci = read(".github/workflows/ci.yml");
 const environment = read("app/runtime/environment.ts");
 const productionDeploy = read("scripts/production-deploy.mjs");
+const productionDeployOutput = read("scripts/production-deploy-output.mjs");
 const releaseGate = read("scripts/release-gate.mjs");
 const textbelt = read("app/domain/reminders/textbelt.ts");
 const workerBindings = read("worker-configuration.d.ts");
@@ -55,6 +56,7 @@ const requiredReleaseChecks = [
   "planning:check",
   "operator:contacts:test",
   "operator:d1:test",
+  "deploy:production:test",
   "operator:d1:verify:dry-run",
   "build",
   "test:browser",
@@ -86,6 +88,21 @@ check(
 check(
   "production D1 uses canonical migrations",
   /migrations_dir:\s*resolve\("migrations"\)/.test(productionDeploy),
+);
+check(
+  "production deploy withholds child output and emits fixed summaries",
+  /runWithSuppressedChildOutput/.test(productionDeploy) &&
+    /withEmittedDeployConfigCleanup/.test(productionDeploy) &&
+    !/redactPrivateValues|process\.(?:stdout|stderr)\.write/.test(
+      productionDeploy,
+    ) &&
+    /stdio:\s*\["ignore",\s*"ignore",\s*"ignore"\]/.test(
+      productionDeployOutput,
+    ) &&
+    /PASS production Worker name chorotate-production/.test(
+      productionDeployOutput,
+    ) &&
+    /PASS deployment provider output withheld/.test(productionDeployOutput),
 );
 check(
   "generated bindings contain no removed provider or contact inputs",
