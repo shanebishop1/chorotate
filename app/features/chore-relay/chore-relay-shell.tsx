@@ -134,7 +134,11 @@ export function ChoreRelayShell(props: Props) {
       </main>
       <footer className="site-footer">
         <p>One home. Clear handoffs. No chore left between people.</p>
-        <span>Authoritative household schedule</span>
+        <nav className="footer-links" aria-label="Service information">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <span>Authoritative household schedule</span>
+        </nav>
       </footer>
     </div>
   );
