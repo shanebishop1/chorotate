@@ -596,12 +596,15 @@ export async function getCurrentAndNext(
         next: assignments.get(`${chore.id}\u0000${nextStart}`) ?? null,
       };
     });
+    const assignmentCount = handoffs.reduce(
+      (count, { current, next }) =>
+        count + Number(current !== null) + Number(next !== null),
+      0,
+    );
     const state =
-      handoffs.length === 0
+      assignmentCount === 0
         ? "empty"
-        : handoffs.some(
-              ({ current, next }) => current === null || next === null,
-            )
+        : assignmentCount < handoffs.length * 2
           ? "unavailable"
           : "ready";
     return { state, handoffs };
