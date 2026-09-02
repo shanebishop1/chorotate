@@ -2918,6 +2918,7 @@ html[data-theme="dark"] .theme-icon-dark {
 .profile-trigger .person {
   width: 30px;
   height: 30px;
+  border: 0;
 }
 
 .profile-popover {
