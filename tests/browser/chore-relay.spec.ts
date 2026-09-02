@@ -92,7 +92,8 @@ test("signed-out landing is centered and omits application navigation", async ({
   await expect(page.getByText("This household is private")).toHaveCount(0);
   const button = page.getByRole("button", { name: "Sign in with Google" });
   await expect(button).toBeVisible();
-  await expect(button.locator(".google-mark")).toBeVisible();
+  await expect(button.locator("svg.google-mark")).toBeVisible();
+  await expect(button.locator(".google-mark path")).toHaveCount(4);
   const alignment = await page.locator(".sign-in-page").evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -106,10 +107,45 @@ test("signed-out landing is centered and omits application navigation", async ({
   expect(Math.abs(alignment.centerY - alignment.viewportY)).toBeLessThan(2);
 });
 
+test("authentication feedback animates without replacing button labels", async ({
+  page,
+}) => {
+  let releaseRequest!: () => void;
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    await requestGate;
+    await route.fulfill({ status: 500, body: "{}" });
+  });
+  await page.goto("/?auth=unauthorized");
+  const button = page.getByRole("button", { name: "Sign in with Google" });
+  const request = page.waitForRequest("**/api/auth/sign-in/social");
+  await button.click();
+  await request;
+
+  await expect(button).toHaveText("Sign in with Google");
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  await expect(button).toHaveClass(/is-pending/);
+  expect(
+    await button.evaluate((element) => getComputedStyle(element).animationName),
+  ).toBe("auth-submit-pending");
+
+  releaseRequest();
+  await expect(page.locator(".auth-status")).toContainText(
+    "Sign in could not be started",
+  );
+});
+
 test("sign out uses the Better Auth JSON request contract", async ({
   page,
 }) => {
+  let releaseRequest!: () => void;
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
   await page.route("**/api/auth/sign-out", async (route) => {
+    await requestGate;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -120,12 +156,17 @@ test("sign out uses the Better Auth JSON request contract", async ({
 
   const requestPromise = page.waitForRequest("**/api/auth/sign-out");
   await page.getByRole("button", { name: "Open profile menu" }).click();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  const button = page.getByRole("button", { name: "Sign out" });
+  await button.click();
   const request = await requestPromise;
 
   expect(request.method()).toBe("POST");
   expect(request.headers()["content-type"]).toBe("application/json");
   expect(request.postDataJSON()).toEqual({});
+  await expect(button).toHaveText("Sign out");
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  await expect(button).toHaveClass(/is-pending/);
+  releaseRequest();
 });
 
 test("profile control uses an available Google image and hides account actions", async ({
@@ -151,7 +192,15 @@ test("profile control uses an available Google image and hides account actions",
   });
   expect(centering).toBeLessThan(1);
   await profile.click();
+  const popover = page.locator(".profile-popover");
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  const edges = await page.locator(".header-actions").evaluate((actions) => ({
+    actions: actions.getBoundingClientRect().right,
+    popover: actions.querySelector(".profile-popover")!.getBoundingClientRect()
+      .right,
+  }));
+  expect(Math.abs(edges.actions - edges.popover)).toBeLessThan(1);
+  await expect(popover).toBeVisible();
 });
 
 test("dialog fits, exposes review semantics, and restores keyboard focus", async ({
@@ -448,23 +497,23 @@ test("theme control switches the rendered shell independently of system mode", a
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    target === "dark" ? "#111310" : "#f4f0e7",
+    target === "dark" ? "#111310" : "#f3f1eb",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
 });
 
-test("light mode restores the bright layered canvas", async ({ page }) => {
+test("light mode uses the flat neutral canvas", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/?view=now");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".app-shell")).toHaveCSS(
     "background-color",
-    "rgb(244, 240, 231)",
+    "rgb(243, 241, 235)",
   );
   expect(
     await page
       .locator(".app-shell")
       .evaluate((element) => getComputedStyle(element).backgroundImage),
-  ).toContain("radial-gradient");
+  ).toBe("none");
 });

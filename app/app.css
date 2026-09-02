@@ -2295,18 +2295,19 @@ select {
 
 .google-mark {
   width: 18px;
-  background: linear-gradient(
-    100deg,
-    #4285f4 0 36%,
-    #34a853 36% 52%,
-    #fbbc05 52% 68%,
-    #ea4335 68%
-  );
-  background-clip: text;
-  color: transparent;
-  font-family: Arial, sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
+  height: 18px;
+  flex: none;
+}
+
+.auth-control .button.is-pending {
+  animation: auth-submit-pending 650ms ease-in-out infinite alternate;
+}
+
+@keyframes auth-submit-pending {
+  to {
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
 }
 
 .app-shell strong,
@@ -2363,7 +2364,7 @@ body,
 }
 
 html {
-  background: #f4f0e7;
+  background: #f3f1eb;
 }
 
 html[data-theme="dark"] {
@@ -2375,16 +2376,16 @@ body {
 }
 
 .app-shell {
-  --canvas: #f4f0e7;
-  --canvas-fade: #eee7d9;
-  --surface: #fffcf6;
-  --surface-raised: #ffffff;
-  --surface-soft: #ebe5d9;
-  --ink: #27231d;
-  --muted: #655e53;
-  --faint: #6f685d;
-  --line: #ded6c8;
-  --line-strong: #c9bdab;
+  --canvas: #f3f1eb;
+  --canvas-fade: #ebe8df;
+  --surface: #faf9f5;
+  --surface-raised: #fffefa;
+  --surface-soft: #eeece5;
+  --ink: #1f221f;
+  --muted: #666b64;
+  --faint: #7b8079;
+  --line: #d9d8d1;
+  --line-strong: #bdbfb7;
   --relay: #d95f32;
   --relay-deep: #a83d1b;
   --relay-soft: #f6ded3;
@@ -2404,13 +2405,7 @@ body {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: none;
-  background:
-    radial-gradient(
-      circle at 9% 4%,
-      rgb(255 255 255 / 70%) 0 11rem,
-      transparent 24rem
-    ),
-    var(--canvas);
+  background: var(--canvas);
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
 }
