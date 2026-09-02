@@ -2625,6 +2625,28 @@ html[data-theme="dark"] .app-shell {
 
 html[data-theme="light"] .app-shell {
   color-scheme: light;
+  --canvas: #f3f1eb;
+  --canvas-fade: #ebe8df;
+  --surface: #faf9f5;
+  --surface-raised: #fffefa;
+  --surface-soft: #eeece5;
+  --ink: #1f221f;
+  --muted: #666b64;
+  --faint: #7b8079;
+  --line: #d9d8d1;
+  --line-strong: #bdbfb7;
+  --relay: #d95f32;
+  --relay-deep: #a83d1b;
+  --relay-soft: #f6ded3;
+  --now: #f2ead2;
+  --now-line: #d7c589;
+  --positive: #27705a;
+  --positive-soft: #dcece5;
+  --danger: #a63e35;
+  --danger-soft: #f5dfdc;
+  --focus: #b9431e;
+  --shadow-sm: 0 1px 2px rgb(25 28 24 / 5%);
+  --shadow-lg: 0 18px 60px rgb(17 19 16 / 25%);
 }
 
 .site-header {
