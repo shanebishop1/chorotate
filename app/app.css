@@ -1969,7 +1969,7 @@ h3 {
     width: 100%;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 3px;
-    padding: 6px 7px calc(6px + env(safe-area-inset-bottom));
+    padding: 6px 7px;
     border-top: 1px solid var(--line);
     background: var(--surface-raised);
     box-shadow: 0 -8px 30px rgb(22 17 10 / 11%);
@@ -3305,7 +3305,7 @@ html[data-theme="dark"] .theme-icon-dark {
     right: env(safe-area-inset-right);
     left: env(safe-area-inset-left);
     width: auto;
-    padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
+    padding: 5px 6px;
   }
 
   .primary-nav a {
