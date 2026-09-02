@@ -8,6 +8,8 @@ declare global {
   namespace Cloudflare {
     interface Env {
       TEST_MIGRATIONS: D1Migration[];
+      TEST_OPERATOR_BOOTSTRAP_SQL: string;
+      TEST_OPERATOR_CONTACT_SQL: string;
     }
   }
 }

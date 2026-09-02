@@ -37,6 +37,28 @@ const validInput = {
   })),
 };
 
+/** @param {DatabaseSync} database @param {string} sql */
+function execAtomic(database, sql) {
+  database.exec("BEGIN");
+  try {
+    database.exec(sql);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+/** @param {DatabaseSync} database */
+function assertionTableCount(database) {
+  return database
+    .prepare(
+      `SELECT count(*) AS count FROM sqlite_schema
+       WHERE type = 'table' AND name LIKE 'operator_%_assert'`,
+    )
+    .get()?.count;
+}
+
 test("validates the exact production member and contact contract", () => {
   assert.deepEqual(validateContactInput(validInput), validInput);
 
@@ -87,7 +109,12 @@ test("generates private D1-only updates with row-count assertions", () => {
 
   assert.match(sql, /UPDATE allowlisted_identities/);
   assert.match(sql, /UPDATE members/);
-  assert.match(sql, /CHECK \(matched_rows = 4\)/);
+  assert.equal(sql.match(/CHECK \(matched_rows = 4\)/g)?.length, 2);
+  assert.match(sql, /CREATE TABLE operator_identity_assert/);
+  assert.match(sql, /CREATE TABLE operator_contact_assert/);
+  assert.doesNotMatch(sql, /CREATE TEMP(?:ORARY)? TABLE/i);
+  assert.match(sql, /DROP TABLE operator_contact_assert/);
+  assert.match(sql, /DROP TABLE operator_identity_assert/);
   assert.doesNotMatch(sql, /SELECT .*email_normalized/i);
   assert.doesNotMatch(sql, /SELECT .*sms_phone_e164/i);
 });
@@ -104,7 +131,9 @@ test("bootstraps a fresh migrated D1 database exactly once", () => {
     database.exec(readFileSync(resolve("migrations", migration), "utf8"));
   }
 
-  database.exec(sql);
+  assert.match(sql, /CREATE TABLE operator_bootstrap_assert/);
+  assert.doesNotMatch(sql, /CREATE TEMP(?:ORARY)? TABLE/i);
+  execAtomic(database, sql);
   const household = database
     .prepare(
       `SELECT time_zone,week_start,reminder_evening_local_time,
@@ -151,8 +180,73 @@ test("bootstraps a fresh migrated D1 database exactly once", () => {
       { id: "trash", ownership_start_weekday: 5 },
     ],
   );
-  assert.throws(() => database.exec(sql));
+  assert.equal(assertionTableCount(database), 0);
+  assert.throws(() => execAtomic(database, sql));
+  assert.equal(assertionTableCount(database), 0);
+  assert.deepEqual(
+    {
+      ...database
+        .prepare(
+          `SELECT
+             (SELECT count(*) FROM households) AS households,
+             (SELECT count(*) FROM members) AS members,
+             (SELECT count(*) FROM allowlisted_identities) AS identities,
+             (SELECT count(*) FROM chores) AS chores,
+             (SELECT count(*) FROM rotation_configs) AS rotations,
+             (SELECT count(*) FROM rotation_config_members) AS rotation_members`,
+        )
+        .get(),
+    },
+    {
+      households: 1,
+      members: 4,
+      identities: 4,
+      chores: 2,
+      rotations: 2,
+      rotation_members: 8,
+    },
+  );
   assert.doesNotMatch(sql, /INSERT INTO weekly_assignments/);
+});
+
+test("exact-row assertion failures roll back updates and assertion tables", () => {
+  const database = new DatabaseSync(":memory:");
+  for (const migration of readdirSync(resolve("migrations")).sort()) {
+    database.exec(readFileSync(resolve("migrations", migration), "utf8"));
+  }
+  execAtomic(
+    database,
+    buildBootstrapSql(validateContactInput(validInput), {
+      timeZone: "America/New_York",
+      weekStart: "monday",
+      eveningTime: "20:00",
+      morningTime: "08:00",
+    }),
+  );
+  database.exec("DELETE FROM allowlisted_identities WHERE member_id = 'shane'");
+  const changed = structuredClone(validInput);
+  for (const member of changed.members) {
+    member.email = `${member.id}.changed@example.com`;
+    member.phoneE164 = `+1555000001${changed.members.indexOf(member)}`;
+  }
+
+  assert.throws(() =>
+    execAtomic(database, buildContactSql(validateContactInput(changed))),
+  );
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT member_id,email_normalized FROM allowlisted_identities
+         ORDER BY member_id`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    ["dylan", "jack", "joe"].map((memberId) => ({
+      member_id: memberId,
+      email_normalized: `${memberId}@example.com`,
+    })),
+  );
+  assert.equal(assertionTableCount(database), 0);
 });
 
 test("an exact-email change revokes sessions and releases only that auth binding", () => {
@@ -160,7 +254,8 @@ test("an exact-email change revokes sessions and releases only that auth binding
   for (const migration of readdirSync(resolve("migrations")).sort()) {
     database.exec(readFileSync(resolve("migrations", migration), "utf8"));
   }
-  database.exec(
+  execAtomic(
+    database,
     buildBootstrapSql(validateContactInput(validInput), {
       timeZone: "America/New_York",
       weekStart: "monday",
@@ -183,7 +278,7 @@ test("an exact-email change revokes sessions and releases only that auth binding
   assert.ok(jack);
   jack.email = "jack.new@example.com";
 
-  database.exec(buildContactSql(validateContactInput(changed)));
+  execAtomic(database, buildContactSql(validateContactInput(changed)));
 
   assert.deepEqual(
     database
@@ -229,7 +324,8 @@ test("the remote verification query proves the exact generated bootstrap", () =>
       .prepare("INSERT INTO d1_migrations (id,name,applied_at) VALUES (?,?,?)")
       .run(index + 1, migration, validInput.recordedAt);
   });
-  database.exec(
+  execAtomic(
+    database,
     buildBootstrapSql(validateContactInput(validInput), {
       timeZone: "America/New_York",
       weekStart: "monday",
