@@ -384,17 +384,12 @@ function NowView({
                 <ReminderStatus reminder={assignment.reminder} />
                 <p className="chore-description">{chore.instructions}</p>
                 <div className="handoff-strip">
-                  <span className="strip-label">Hands off next</span>
+                  <span className="strip-label">Next period</span>
                   <div className="handoff-next-person">
-                    <Person member={assignment.member} size="tiny" />
-                    <span className="flow-line" aria-hidden="true">
-                      <span />→
-                    </span>
                     <Person member={next.member} size="tiny" />
                     <strong>{next.member.displayName}</strong>
                   </div>
-                  <PeriodRange range={nextPeriod} label="Next period" />
-                  <ReminderStatus reminder={next.reminder} />
+                  <PeriodRange range={nextPeriod} />
                 </div>
                 <button
                   className="button quiet"
@@ -537,10 +532,6 @@ function HouseholdView({
         >
           All time
         </Link>
-        <span
-          className={`range-busy ${rangePending ? "is-visible" : ""}`}
-          aria-hidden="true"
-        />
       </nav>
       <div className="filter-row" aria-label="Schedule filters">
         <CustomDropdown
@@ -621,6 +612,12 @@ function HouseholdView({
                                 assignment={assignment}
                                 current={current}
                               />
+                              <span
+                                className="schedule-edit-cue"
+                                aria-hidden="true"
+                              >
+                                ›
+                              </span>
                             </button>
                           </td>
                         </tr>
@@ -659,6 +656,9 @@ function HouseholdView({
                           ) : null}
                           <ReminderStatus reminder={assignment.reminder} />
                         </div>
+                        <span className="schedule-edit-cue" aria-hidden="true">
+                          ›
+                        </span>
                       </button>
                     </li>
                   );

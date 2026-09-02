@@ -226,11 +226,12 @@ describe("Chore Relay integrated rendering", () => {
       expect(html).toContain(label);
   });
 
-  it("renders authoritative Now instructions and current-to-next handoffs", () => {
+  it("renders authoritative Now instructions and next-period summaries", () => {
     const html = render("now");
     expect(html).toContain("Take the trash out and replace bags.");
     expect(html).toContain("Empty the completed dishwasher.");
-    expect(html).toContain("Hands off next");
+    expect(html).toContain("Next period");
+    expect(html).not.toContain("Hands off next");
     expect(html).not.toContain("Mock workspace");
     expect(html).not.toContain("The handoff starts here");
     expect(html).not.toContain("Every turn keeps its own dates");
@@ -279,8 +280,6 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).toContain("Evening reminder accepted for sending");
     expect(html).toContain("Reminder delivery unconfirmed");
     expect(html).toContain("Reminder correction needed");
-    expect(html).toContain("Reminder contact missing");
-    expect(html).toContain("Reminders suppressed");
     expect(html).not.toMatch(/textbelt|phone|quota|textId/i);
   });
 
