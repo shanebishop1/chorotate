@@ -1,10 +1,18 @@
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
 import {
   buildProductionD1VerificationQuery,
   expectedProductionD1Result,
   productionD1SettingsFromEnvironment,
 } from "./production-d1-contract.mjs";
+import {
+  buildProductionD1OperatorConfig,
+  buildProductionD1WranglerArgs,
+  productionD1DatabaseIdFromEnvironment,
+  productionWranglerEnvironment,
+  withTemporaryWranglerConfig,
+} from "./production-d1-wrangler.mjs";
 
 const dryRun = process.argv.includes("--dry-run");
 const unexpectedArgs = process.argv
@@ -37,20 +45,34 @@ try {
   process.exit(1);
 }
 
-const result = spawnSync(
-  process.execPath,
-  [
-    "node_modules/wrangler/bin/wrangler.js",
-    "d1",
-    "execute",
-    "chorotate-production",
-    "--remote",
-    "--json",
-    "--command",
-    verificationQuery,
-  ],
-  { encoding: "utf8", maxBuffer: 1024 * 1024 },
-);
+let result;
+try {
+  const databaseId = productionD1DatabaseIdFromEnvironment(process.env);
+  result = await withTemporaryWranglerConfig(
+    buildProductionD1OperatorConfig(databaseId),
+    ({ configPath, sqlPath }) =>
+      spawnSync(
+        process.execPath,
+        [
+          resolve("node_modules/wrangler/bin/wrangler.js"),
+          ...buildProductionD1WranglerArgs("verify", { configPath, sqlPath }),
+        ],
+        {
+          encoding: "utf8",
+          maxBuffer: 1024 * 1024,
+          env: productionWranglerEnvironment(process.env),
+        },
+      ),
+    { sql: verificationQuery },
+  );
+} catch (error) {
+  console.error(
+    error instanceof Error
+      ? error.message
+      : "Invalid production D1 configuration",
+  );
+  process.exit(1);
+}
 if (result.status !== 0) {
   console.error(
     "Remote D1 verification unavailable or failed; confirm Cloudflare credentials, account access, and the chorotate-production database. Provider output was withheld.",

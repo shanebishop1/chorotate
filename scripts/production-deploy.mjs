@@ -1,10 +1,16 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { access, rm } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { experimental_readRawConfig } from "wrangler";
+
+import {
+  productionD1DatabaseIdFromEnvironment,
+  productionWranglerEnvironment,
+  redactPrivateValues,
+  withTemporaryWranglerConfig,
+} from "./production-d1-wrangler.mjs";
 
 const mode = process.argv[2];
 if (mode !== "dry-run" && mode !== "deploy") {
@@ -35,13 +41,9 @@ const values = Object.fromEntries(
 );
 const invalid = new Set(inputNames.filter((name) => values[name] === ""));
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const databaseIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-if (
-  !databaseIdPattern.test(values.PRODUCTION_D1_DATABASE_ID) ||
-  values.PRODUCTION_D1_DATABASE_ID === "00000000-0000-0000-0000-000000000000"
-) {
+try {
+  productionD1DatabaseIdFromEnvironment(values);
+} catch {
   invalid.add("PRODUCTION_D1_DATABASE_ID");
 }
 
@@ -180,10 +182,7 @@ const redactedValues = Object.values(values)
   .sort((left, right) => right.length - left.length);
 /** @param {string} output */
 function redact(output) {
-  let redacted = output;
-  for (const value of redactedValues)
-    redacted = redacted.replaceAll(value, "[REDACTED]");
-  return redacted;
+  return redactPrivateValues(output, redactedValues);
 }
 
 /**
@@ -213,13 +212,6 @@ async function run(command, args, environment) {
     throw new Error(`${command} exited with status ${exitCode}`);
 }
 
-const temporaryDirectory = await mkdtemp(
-  join(tmpdir(), "chorotate-production-"),
-);
-const generatedConfigPath = join(
-  temporaryDirectory,
-  "wrangler.production.json",
-);
 const builtConfigPath = resolve("build/server/wrangler.json");
 try {
   const { rawConfig } = await experimental_readRawConfig({
@@ -254,35 +246,29 @@ try {
       migrations_dir: resolve("migrations"),
     },
   ];
-  await writeFile(
-    generatedConfigPath,
-    `${JSON.stringify(rawConfig, null, 2)}\n`,
-    {
-      mode: 0o600,
-    },
-  );
-
-  const environment = {
-    ...process.env,
-    CLOUDFLARE_ENV: "production",
-    CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: generatedConfigPath,
-  };
-  await run("npm", ["run", "build"], environment);
-  await access(builtConfigPath);
-  /** @type {NodeJS.ProcessEnv} */
-  const deployEnvironment = { ...environment };
-  delete deployEnvironment.CLOUDFLARE_ENV;
-  delete deployEnvironment.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
-  await run(
-    resolve("node_modules/.bin/wrangler"),
-    [
-      "deploy",
-      "--config",
-      builtConfigPath,
-      ...(mode === "dry-run" ? ["--dry-run"] : []),
-    ],
-    deployEnvironment,
-  );
+  await withTemporaryWranglerConfig(rawConfig, async ({ configPath }) => {
+    const environment = productionWranglerEnvironment({
+      ...process.env,
+      CLOUDFLARE_ENV: "production",
+      CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath,
+    });
+    await run("npm", ["run", "build"], environment);
+    await access(builtConfigPath);
+    /** @type {NodeJS.ProcessEnv} */
+    const deployEnvironment = { ...environment };
+    delete deployEnvironment.CLOUDFLARE_ENV;
+    delete deployEnvironment.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+    await run(
+      resolve("node_modules/.bin/wrangler"),
+      [
+        "deploy",
+        "--config",
+        builtConfigPath,
+        ...(mode === "dry-run" ? ["--dry-run"] : []),
+      ],
+      deployEnvironment,
+    );
+  });
 } catch (error) {
   console.error(
     redact(
@@ -294,5 +280,4 @@ try {
   // Vite's deploy config contains the injected resource id and operator vars.
   // It is intentionally short-lived even though build/ is gitignored.
   await rm(builtConfigPath, { force: true });
-  await rm(temporaryDirectory, { recursive: true, force: true });
 }

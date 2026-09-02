@@ -54,6 +54,7 @@ const requiredReleaseChecks = [
   "test:workerd",
   "planning:check",
   "operator:contacts:test",
+  "operator:d1:test",
   "operator:d1:verify:dry-run",
   "build",
   "test:browser",
@@ -187,7 +188,7 @@ check(
   !/(?:PHONE|E164|CONTACT)/.test(environmentContract),
 );
 const operatorContactTool = read("scripts/operator-contact-config.mjs");
-const remoteD1Verification = `${read("scripts/verify-production-d1.mjs")}\n${read("scripts/production-d1-contract.mjs")}`;
+const remoteD1Verification = `${read("scripts/verify-production-d1.mjs")}\n${read("scripts/production-d1-contract.mjs")}\n${read("scripts/production-d1-wrangler.mjs")}`;
 const scheduledReminders = read("app/domain/reminders/scheduled.ts");
 check(
   "operator contact preparation keeps private files outside the repository",
