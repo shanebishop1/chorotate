@@ -289,6 +289,11 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).not.toContain("123e4567-e89b-12d3-a456-426614174000");
   });
 
+  it("describes swap selections without transfer jargon", () => {
+    const html = render("now");
+    expect(html).not.toMatch(/outgoing|incoming/i);
+  });
+
   it("surfaces correction-needed History evidence without sensitive delivery details", () => {
     const html = render("history");
     expect(html).toContain("Reminder correction needed");
@@ -298,8 +303,11 @@ describe("Chore Relay integrated rendering", () => {
 
   it("fails closed with explicit unauthorized and unavailable SSR states", () => {
     const unauthorized = render("now", "unauthorized");
-    expect(unauthorized).toContain("This household is private");
+    expect(unauthorized).toContain('class="sign-in-page"');
     expect(unauthorized).toContain("Sign in with Google");
+    expect(unauthorized).toContain('class="google-mark"');
+    expect(unauthorized).not.toContain("This household is private");
+    expect(unauthorized).not.toContain("ChoRotate views");
     expect(unauthorized).toContain('aria-live="polite"');
     const unavailable = render("now", "unavailable");
     expect(unavailable).toContain("Schedule temporarily unavailable");

@@ -219,6 +219,9 @@ function Fixture() {
   const location = useLocation();
   const search = new URLSearchParams(location.search);
   const view = normalizeView(search.get("view"));
+  if (search.get("auth") === "unauthorized") {
+    return <ChoreRelayShell activeView={view} state="unauthorized" />;
+  }
   const endedChore = search.get("ended");
   const endedAssignment = endedAssignments.find(
     ({ chore }) => chore.id === endedChore,

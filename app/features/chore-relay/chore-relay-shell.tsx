@@ -59,7 +59,7 @@ export function ChoreRelayShell(props: Props) {
       const current = effectiveTheme();
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute("content", current === "dark" ? "#111310" : "#f3f1eb");
+        ?.setAttribute("content", current === "dark" ? "#111310" : "#f4f0e7");
       setTheme(current);
     };
     sync();
@@ -70,6 +70,24 @@ export function ChoreRelayShell(props: Props) {
     const next = (theme ?? effectiveTheme()) === "dark" ? "light" : "dark";
     applyTheme(next);
     setTheme(next);
+  }
+  if (props.state === "unauthorized") {
+    return (
+      <div className="app-shell sign-in-shell">
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
+        <main id="main-content" className="sign-in-page" tabIndex={-1}>
+          <div className="sign-in-panel">
+            <span className="brand-mark" aria-hidden="true">
+              <Icon name="brand" />
+            </span>
+            <h1>ChoRotate</h1>
+            <AuthControl kind="sign-in" />
+          </div>
+        </main>
+      </div>
+    );
   }
   return (
     <div className="app-shell">
@@ -131,9 +149,7 @@ export function ChoreRelayShell(props: Props) {
         </nav>
       </header>
       <main id="main-content" className="main-content" tabIndex={-1}>
-        {props.state === "unauthorized" ? (
-          <SystemState kind="unauthorized" />
-        ) : props.state === "unavailable" ? (
+        {props.state === "unavailable" ? (
           <SystemState kind="unavailable" />
         ) : props.data ? (
           <ReadyShell activeView={props.activeView} data={props.data} />
@@ -159,7 +175,7 @@ function applyTheme(theme: Exclude<Theme, undefined>) {
   localStorage.setItem("chorotate-theme", theme);
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "dark" ? "#111310" : "#f3f1eb");
+    ?.setAttribute("content", theme === "dark" ? "#111310" : "#f4f0e7");
 }
 
 function ReadyShell({
@@ -933,7 +949,7 @@ function AssignmentSelect({
         <option value="">Choose an assignment</option>
         {assignments.map((item) => (
           <option key={item.assignmentId} value={item.assignmentId}>
-            {item.chore.name} — {formatPeriod(item.period)} — outgoing{" "}
+            {item.chore.name} — {formatPeriod(item.period)} —{" "}
             {item.member.displayName}
           </option>
         ))}
@@ -955,13 +971,13 @@ function ReassignReview({
       <div className="review-route">
         <span>
           <Person member={assignment.member} />
-          <small>Outgoing person</small>
+          <small>Current</small>
           <strong>{assignment.member.displayName}</strong>
         </span>
         <i aria-hidden="true">→</i>
         <span>
           <Person member={recipient} />
-          <small>Incoming person</small>
+          <small>New</small>
           <strong>{recipient.displayName}</strong>
         </span>
       </div>
@@ -1013,13 +1029,13 @@ function SwapLeg({
       <div className="swap-route">
         <span>
           <Person member={assignment.member} size="small" />
-          <small>Outgoing</small>
+          <small>Current</small>
           <strong>{assignment.member.displayName}</strong>
         </span>
         <i aria-hidden="true">→</i>
         <span>
           <Person member={to} size="small" />
-          <small>Incoming</small>
+          <small>After swap</small>
           <strong>{to.displayName}</strong>
         </span>
       </div>
@@ -1204,7 +1220,6 @@ function ProfileMenu({ member }: { member: AuthorizedMember }) {
         onClick={() => setOpen((current) => !current)}
       >
         <Person member={toProjected(member)} size="small" />
-        <Icon name="chevron" />
       </button>
       <div className="profile-popover" id="profile-popover" hidden={!open}>
         <strong>{member.displayName}</strong>
@@ -1265,6 +1280,11 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
         disabled={pending}
         aria-busy={pending}
       >
+        {signIn ? (
+          <span className="google-mark" aria-hidden="true">
+            G
+          </span>
+        ) : null}
         {pending
           ? signIn
             ? "Starting sign in…"
@@ -1520,7 +1540,12 @@ function Icon({ name }: { name: string }) {
         <circle cx="4" cy="18" r=".7" fill="currentColor" stroke="none" />
       </>
     ),
-    swap: <path d="M4 8h14l-3-3M20 16H6l3 3" />,
+    swap: (
+      <>
+        <path d="M6 7h12m0 0-3-3m3 3-3 3" />
+        <path d="M18 17H6m0 0 3 3m-3-3 3-3" />
+      </>
+    ),
     moon: <path d="M20 15a8 8 0 1 1-11-11 7 7 0 0 0 11 11Z" />,
     sun: (
       <>
@@ -1528,7 +1553,6 @@ function Icon({ name }: { name: string }) {
         <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
       </>
     ),
-    chevron: <path d="m8 10 4 4 4-4" />,
     trash: (
       <>
         <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />

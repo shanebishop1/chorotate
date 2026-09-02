@@ -58,6 +58,54 @@ test("view links navigate without replacing the document", async ({ page }) => {
   ).toBe("preserved");
 });
 
+test("view changes keep the header and content rails stationary", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const positions = () =>
+    page.evaluate(() => ({
+      header: document.querySelector(".header-row")?.getBoundingClientRect().x,
+      main: document.querySelector(".main-content")?.getBoundingClientRect().x,
+    }));
+  const before = await positions();
+
+  await page.getByRole("link", { name: "History" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Recent changes" }),
+  ).toBeVisible();
+  expect(await positions()).toEqual(before);
+
+  await page.getByRole("link", { name: "Household" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Household schedule" }),
+  ).toBeVisible();
+  expect(await positions()).toEqual(before);
+});
+
+test("signed-out landing is centered and omits application navigation", async ({
+  page,
+}) => {
+  await page.goto("/?auth=unauthorized");
+  await expect(
+    page.getByRole("navigation", { name: "ChoRotate views" }),
+  ).toHaveCount(0);
+  await expect(page.getByText("This household is private")).toHaveCount(0);
+  const button = page.getByRole("button", { name: "Sign in with Google" });
+  await expect(button).toBeVisible();
+  await expect(button.locator(".google-mark")).toBeVisible();
+  const alignment = await page.locator(".sign-in-page").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      centerX: rect.left + rect.width / 2,
+      centerY: rect.top + rect.height / 2,
+      viewportX: window.innerWidth / 2,
+      viewportY: window.innerHeight / 2,
+    };
+  });
+  expect(Math.abs(alignment.centerX - alignment.viewportX)).toBeLessThan(2);
+  expect(Math.abs(alignment.centerY - alignment.viewportY)).toBeLessThan(2);
+});
+
 test("sign out uses the Better Auth JSON request contract", async ({
   page,
 }) => {
@@ -94,6 +142,14 @@ test("profile control uses an available Google image and hides account actions",
     "https://lh3.googleusercontent.com/a/profile-photo",
   );
   await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
+  const centering = await profile.evaluate((button) => {
+    const control = button.getBoundingClientRect();
+    const avatar = button.querySelector(".person")!.getBoundingClientRect();
+    return Math.abs(
+      control.left + control.width / 2 - (avatar.left + avatar.width / 2),
+    );
+  });
+  expect(centering).toBeLessThan(1);
   await profile.click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
@@ -123,9 +179,9 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
   await expect(
     page.getByRole("button", { name: "Confirm handoff" }),
   ).toBeEnabled();
-  await expect(dialog).toContainText("Outgoing person");
+  await expect(dialog).toContainText("Current");
   await expect(dialog).toContainText("Member A");
-  await expect(dialog).toContainText("Incoming person");
+  await expect(dialog).toContainText("New");
   await expect(dialog).toContainText("Member B");
   await expect(dialog).toContainText("Ownership range");
 
@@ -252,15 +308,18 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   await page.getByLabel("Second turn").selectOption("2026-08-31-dishwasher");
   await expect(
     page.getByLabel("First turn").locator("option:checked"),
-  ).toHaveText("Trash — Fri, Aug 28 – Thu, Sep 3 — outgoing Member A");
+  ).toHaveText("Trash — Fri, Aug 28 – Thu, Sep 3 — Member A");
   await expect(
     page.getByLabel("Second turn").locator("option:checked"),
-  ).toHaveText("Dishwasher — Mon, Aug 31 – Sun, Sep 6 — outgoing Member C");
+  ).toHaveText("Dishwasher — Mon, Aug 31 – Sun, Sep 6 — Member C");
   await expect(
     page.getByRole("heading", { name: "Review both swap legs" }),
   ).toBeVisible();
   await expect(page.getByText("Leg 1", { exact: true })).toBeVisible();
   await expect(page.getByText("Leg 2", { exact: true })).toBeVisible();
+  await expect(dialog).not.toContainText(/Outgoing|Incoming/);
+  await expect(dialog).toContainText("Current");
+  await expect(dialog).toContainText("After swap");
   await expect(dialog).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(dialog).toContainText("Mon, Aug 31 – Sun, Sep 6");
   const confirm = page.getByRole("button", { name: "Confirm atomic swap" });
@@ -299,9 +358,9 @@ test("stale recovery names refreshed ownership values and requires intentional r
   });
   await expect(reviewed).toBeFocused();
   await expect(reviewed).toHaveAttribute("aria-disabled", "true");
-  await expect(dialog).toContainText("Outgoing person");
+  await expect(dialog).toContainText("Current");
   await expect(dialog).toContainText("Member C");
-  await expect(dialog).toContainText("Incoming person");
+  await expect(dialog).toContainText("New");
   await expect(dialog).toContainText("Member B");
   await expect(
     page.getByRole("button", { name: "Confirm handoff" }),
@@ -389,8 +448,23 @@ test("theme control switches the rendered shell independently of system mode", a
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    target === "dark" ? "#111310" : "#f3f1eb",
+    target === "dark" ? "#111310" : "#f4f0e7",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
+});
+
+test("light mode restores the bright layered canvas", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/?view=now");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator(".app-shell")).toHaveCSS(
+    "background-color",
+    "rgb(244, 240, 231)",
+  );
+  expect(
+    await page
+      .locator(".app-shell")
+      .evaluate((element) => getComputedStyle(element).backgroundImage),
+  ).toContain("radial-gradient");
 });
