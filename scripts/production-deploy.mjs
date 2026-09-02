@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { access, rm } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,9 +7,14 @@ import { experimental_readRawConfig } from "wrangler";
 import {
   productionD1DatabaseIdFromEnvironment,
   productionWranglerEnvironment,
-  redactPrivateValues,
   withTemporaryWranglerConfig,
 } from "./production-d1-wrangler.mjs";
+import {
+  fixedProductionDeployFailure,
+  runWithSuppressedChildOutput,
+  successfulProductionDeployChecks,
+  withEmittedDeployConfigCleanup,
+} from "./production-deploy-output.mjs";
 
 const mode = process.argv[2];
 if (mode !== "dry-run" && mode !== "deploy") {
@@ -177,107 +181,83 @@ if (invalid.size > 0) {
   process.exit(1);
 }
 
-const redactedValues = Object.values(values)
-  .filter(Boolean)
-  .sort((left, right) => right.length - left.length);
-/** @param {string} output */
-function redact(output) {
-  return redactPrivateValues(output, redactedValues);
-}
-
-/**
- * @param {string} command
- * @param {string[]} args
- * @param {NodeJS.ProcessEnv} environment
- */
-async function run(command, args, environment) {
-  const child = spawn(command, args, {
-    cwd: resolve(fileURLToPath(new URL("..", import.meta.url))),
-    env: environment,
-    stdio: ["inherit", "pipe", "pipe"],
-  });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => (stdout += chunk));
-  child.stderr.on("data", (chunk) => (stderr += chunk));
-  const exitCode = await new Promise((complete, reject) => {
-    child.once("error", reject);
-    child.once("close", complete);
-  });
-  process.stdout.write(redact(stdout));
-  process.stderr.write(redact(stderr));
-  if (exitCode !== 0)
-    throw new Error(`${command} exited with status ${exitCode}`);
-}
-
 const builtConfigPath = resolve("build/server/wrangler.json");
 try {
-  const { rawConfig } = await experimental_readRawConfig({
-    config: resolve("wrangler.jsonc"),
-  });
-  delete rawConfig.$schema;
-  rawConfig.main = resolve("workers/app.ts");
-  rawConfig.env ??= {};
-  rawConfig.env.production ??= {};
-  rawConfig.env.production.vars = {
-    APP_ENV: "production",
-    CANONICAL_ORIGIN: values.PRODUCTION_CANONICAL_ORIGIN,
-    HOUSEHOLD_TIME_ZONE: values.PRODUCTION_HOUSEHOLD_TIME_ZONE,
-    HOUSEHOLD_WEEK_START: values.PRODUCTION_HOUSEHOLD_WEEK_START,
-    OWNER_EMAIL: ownerEmail,
-    ALLOWED_EMAILS: allowedEmails.join(","),
-    REMINDER_SMS_ENABLED: reminderSmsEnabled,
-    REMINDER_BATCH_SIZE: String(reminderBatchSize),
-    REMINDER_LEASE_MILLISECONDS: String(reminderLeaseMilliseconds),
-    REMINDER_MAX_ATTEMPTS: String(reminderMaxAttempts),
-    REMINDER_PROVIDER_TIMEOUT_MILLISECONDS: String(
-      reminderProviderTimeoutMilliseconds,
-    ),
-    REMINDER_RETRY_BASE_MILLISECONDS: String(reminderRetryBaseMilliseconds),
-    REMINDER_RETRY_MAX_MILLISECONDS: String(reminderRetryMaxMilliseconds),
-  };
-  rawConfig.env.production.d1_databases = [
-    {
-      binding: "DB",
-      database_name: "chorotate-production",
-      database_id: values.PRODUCTION_D1_DATABASE_ID,
-      migrations_dir: resolve("migrations"),
-    },
-  ];
-  await withTemporaryWranglerConfig(rawConfig, async ({ configPath }) => {
-    const environment = productionWranglerEnvironment({
-      ...process.env,
-      CLOUDFLARE_ENV: "production",
-      CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath,
+  await withEmittedDeployConfigCleanup(builtConfigPath, async () => {
+    const { rawConfig } = await experimental_readRawConfig({
+      config: resolve("wrangler.jsonc"),
     });
-    await run("npm", ["run", "build"], environment);
-    await access(builtConfigPath);
-    /** @type {NodeJS.ProcessEnv} */
-    const deployEnvironment = { ...environment };
-    delete deployEnvironment.CLOUDFLARE_ENV;
-    delete deployEnvironment.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
-    await run(
-      resolve("node_modules/.bin/wrangler"),
-      [
-        "deploy",
-        "--config",
-        builtConfigPath,
-        ...(mode === "dry-run" ? ["--dry-run"] : []),
-      ],
-      deployEnvironment,
-    );
+    delete rawConfig.$schema;
+    rawConfig.main = resolve("workers/app.ts");
+    rawConfig.env ??= {};
+    rawConfig.env.production ??= {};
+    rawConfig.env.production.vars = {
+      APP_ENV: "production",
+      CANONICAL_ORIGIN: values.PRODUCTION_CANONICAL_ORIGIN,
+      HOUSEHOLD_TIME_ZONE: values.PRODUCTION_HOUSEHOLD_TIME_ZONE,
+      HOUSEHOLD_WEEK_START: values.PRODUCTION_HOUSEHOLD_WEEK_START,
+      OWNER_EMAIL: ownerEmail,
+      ALLOWED_EMAILS: allowedEmails.join(","),
+      REMINDER_SMS_ENABLED: reminderSmsEnabled,
+      REMINDER_BATCH_SIZE: String(reminderBatchSize),
+      REMINDER_LEASE_MILLISECONDS: String(reminderLeaseMilliseconds),
+      REMINDER_MAX_ATTEMPTS: String(reminderMaxAttempts),
+      REMINDER_PROVIDER_TIMEOUT_MILLISECONDS: String(
+        reminderProviderTimeoutMilliseconds,
+      ),
+      REMINDER_RETRY_BASE_MILLISECONDS: String(reminderRetryBaseMilliseconds),
+      REMINDER_RETRY_MAX_MILLISECONDS: String(reminderRetryMaxMilliseconds),
+    };
+    rawConfig.env.production.d1_databases = [
+      {
+        binding: "DB",
+        database_name: "chorotate-production",
+        database_id: values.PRODUCTION_D1_DATABASE_ID,
+        migrations_dir: resolve("migrations"),
+      },
+    ];
+    await withTemporaryWranglerConfig(rawConfig, async ({ configPath }) => {
+      const environment = productionWranglerEnvironment({
+        ...process.env,
+        CLOUDFLARE_ENV: "production",
+        CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath,
+      });
+      const repositoryRoot = resolve(
+        fileURLToPath(new URL("..", import.meta.url)),
+      );
+      await runWithSuppressedChildOutput("npm", ["run", "build"], {
+        cwd: repositoryRoot,
+        env: environment,
+        category: "build",
+      });
+      await access(builtConfigPath);
+      /** @type {NodeJS.ProcessEnv} */
+      const deployEnvironment = { ...environment };
+      delete deployEnvironment.CLOUDFLARE_ENV;
+      delete deployEnvironment.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+      await runWithSuppressedChildOutput(
+        resolve("node_modules/.bin/wrangler"),
+        [
+          "deploy",
+          "--config",
+          builtConfigPath,
+          ...(mode === "dry-run" ? ["--dry-run"] : []),
+        ],
+        {
+          cwd: repositoryRoot,
+          env: deployEnvironment,
+          category: mode,
+        },
+      );
+    });
   });
+  for (const check of successfulProductionDeployChecks(
+    mode,
+    reminderSmsEnabled,
+  )) {
+    console.log(check);
+  }
 } catch (error) {
-  console.error(
-    redact(
-      error instanceof Error ? error.message : "Production command failed",
-    ),
-  );
+  console.error(fixedProductionDeployFailure(error));
   process.exitCode = 1;
-} finally {
-  // Vite's deploy config contains the injected resource id and operator vars.
-  // It is intentionally short-lived even though build/ is gitignored.
-  await rm(builtConfigPath, { force: true });
 }
