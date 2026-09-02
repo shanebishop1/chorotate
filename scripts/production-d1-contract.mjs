@@ -228,3 +228,32 @@ export const expectedProductionD1Result = {
   expected_rotation_members: 8,
   duplicate_occurrences: 0,
 };
+
+/** @param {string} output */
+export function parseProductionD1VerificationOutput(output) {
+  try {
+    const payload = JSON.parse(output);
+    if (
+      !Array.isArray(payload) ||
+      payload.length !== 1 ||
+      payload[0]?.success !== true ||
+      !Array.isArray(payload[0].results) ||
+      payload[0].results.length !== 1
+    ) {
+      return undefined;
+    }
+    const row = payload[0].results[0];
+    if (
+      row !== null &&
+      typeof row === "object" &&
+      Object.keys(expectedProductionD1Result).every((name) =>
+        Object.hasOwn(row, name),
+      )
+    ) {
+      return /** @type {Record<string, unknown>} */ (row);
+    }
+  } catch {
+    // Raw provider output can contain resource identifiers; callers get no detail.
+  }
+  return undefined;
+}

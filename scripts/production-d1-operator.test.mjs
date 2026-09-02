@@ -16,6 +16,11 @@ import test from "node:test";
 
 import { parseProductionD1OperatorArgs } from "./production-d1-operator.mjs";
 import {
+  buildProductionD1VerificationQuery,
+  expectedProductionD1Result,
+  parseProductionD1VerificationOutput,
+} from "./production-d1-contract.mjs";
+import {
   buildProductionD1OperatorConfig,
   buildProductionD1WranglerArgs,
   productionD1DatabaseIdFromEnvironment,
@@ -29,6 +34,12 @@ const databaseId = "12345678-1234-4123-8123-123456789abc";
 test("builds only fixed binding-based production D1 commands", () => {
   const configPath = "/private/wrangler.json";
   const sqlPath = "/private/bootstrap.sql";
+  const verificationQuery = buildProductionD1VerificationQuery({
+    timeZone: "America/New_York",
+    weekStart: "monday",
+    eveningTime: "20:00",
+    morningTime: "08:00",
+  });
   assert.deepEqual(
     buildProductionD1WranglerArgs("migrations-list", { configPath }),
     ["d1", "migrations", "list", "DB", "--remote", "--config", configPath],
@@ -51,7 +62,10 @@ test("builds only fixed binding-based production D1 commands", () => {
     ],
   );
   assert.deepEqual(
-    buildProductionD1WranglerArgs("verify", { configPath, sqlPath }),
+    buildProductionD1WranglerArgs("verify", {
+      configPath,
+      verificationQuery,
+    }),
     [
       "d1",
       "execute",
@@ -60,11 +74,12 @@ test("builds only fixed binding-based production D1 commands", () => {
       "--config",
       configPath,
       "--json",
-      "--file",
-      sqlPath,
+      "--command",
+      verificationQuery,
     ],
   );
   assert.throws(() => buildProductionD1WranglerArgs("execute", { configPath }));
+  assert.throws(() => buildProductionD1WranglerArgs("verify", { configPath }));
   assert.throws(() =>
     buildProductionD1WranglerArgs("arbitrary", { configPath }),
   );
@@ -100,27 +115,67 @@ test("validates the injected id and keeps it only in the temporary config", asyn
   const config = buildProductionD1OperatorConfig(databaseId);
   let temporaryDirectory = "";
   await assert.rejects(
-    withTemporaryWranglerConfig(
-      config,
-      ({ configPath, sqlPath }) => {
-        assert.ok(sqlPath);
-        temporaryDirectory = resolve(configPath, "..");
-        assert.equal(statSync(configPath).mode & 0o777, 0o600);
-        assert.equal(statSync(sqlPath).mode & 0o777, 0o600);
-        assert.equal(
-          JSON.parse(readFileSync(configPath, "utf8")).d1_databases[0]
-            .database_id,
-          databaseId,
-        );
-        assert.equal(readFileSync(sqlPath, "utf8"), "SELECT 1;\n");
-        assert.ok(!configPath.includes(databaseId));
-        throw new Error("forced cleanup");
-      },
-      { sql: "SELECT 1;\n" },
-    ),
+    withTemporaryWranglerConfig(config, ({ configPath }) => {
+      temporaryDirectory = resolve(configPath, "..");
+      assert.equal(statSync(configPath).mode & 0o777, 0o600);
+      assert.equal(
+        JSON.parse(readFileSync(configPath, "utf8")).d1_databases[0]
+          .database_id,
+        databaseId,
+      );
+      assert.ok(!configPath.includes(databaseId));
+      throw new Error("forced cleanup");
+    }),
     /forced cleanup/,
   );
   assert.equal(existsSync(temporaryDirectory), false);
+});
+
+test("accepts clean command JSON and rejects file-import result shapes", () => {
+  const commandOutput = JSON.stringify([
+    { results: [expectedProductionD1Result], success: true },
+  ]);
+  const importOutput = JSON.stringify([
+    {
+      results: [
+        {
+          "Total queries executed": 12,
+          "Rows read": 4,
+          "Rows written": 4,
+        },
+      ],
+      success: true,
+    },
+  ]);
+
+  assert.deepEqual(
+    parseProductionD1VerificationOutput(commandOutput),
+    expectedProductionD1Result,
+  );
+  assert.equal(parseProductionD1VerificationOutput(importOutput), undefined);
+  assert.equal(
+    parseProductionD1VerificationOutput(
+      JSON.stringify([
+        { results: [expectedProductionD1Result], success: false },
+      ]),
+    ),
+    undefined,
+  );
+  assert.equal(
+    parseProductionD1VerificationOutput(
+      JSON.stringify([
+        {
+          results: [expectedProductionD1Result, expectedProductionD1Result],
+          success: true,
+        },
+      ]),
+    ),
+    undefined,
+  );
+  assert.equal(
+    parseProductionD1VerificationOutput(`provider envelope\n${importOutput}`),
+    undefined,
+  );
 });
 
 test("strictly accepts only private mode-restricted SQL files", async () => {
