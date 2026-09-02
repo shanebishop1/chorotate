@@ -41,6 +41,7 @@ export interface ProjectedMember {
   id: string;
   displayName: string;
   active: boolean;
+  imageUrl?: string;
 }
 
 export async function getActiveMembers(

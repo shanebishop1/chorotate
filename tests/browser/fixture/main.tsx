@@ -132,7 +132,12 @@ const historyAssignments = chores.map((chore) =>
 );
 
 const data: ChoreRelayData = {
-  signedInMember: { id: "member-d", householdId: "home", displayName: "Member D" },
+  signedInMember: {
+    id: "member-d",
+    householdId: "home",
+    displayName: "Member D",
+    imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
+  },
   current: {
     state: "ready",
     handoffs: chores.map((chore) => ({
@@ -179,7 +184,7 @@ const data: ChoreRelayData = {
     page: { limit: 25, offset: 0, nextOffset: null },
     operations: [
       {
-        operationId: "swap-1",
+        operationId: "operation:123e4567-e89b-12d3-a456-426614174000",
         requestId: "request-1",
         kind: "swap",
         occurredAt: "2026-08-31T14:00:00Z",

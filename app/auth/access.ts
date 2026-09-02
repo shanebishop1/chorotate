@@ -2,12 +2,14 @@ export interface AuthorizedMember {
   id: string;
   householdId: string;
   displayName: string;
+  imageUrl?: string;
 }
 
 export interface SessionIdentity {
   sessionId: string;
   userId: string;
   email: string;
+  imageUrl?: string;
 }
 
 export type AllowlistLookup = (
@@ -72,7 +74,8 @@ export function createRequestAuthorizer(dependencies: {
     }
 
     if (member === null) throw new AuthorizationError(403);
-    return member;
+    const imageUrl = trustedGoogleImage(identity.imageUrl);
+    return imageUrl ? { ...member, imageUrl } : member;
   }
 
   return {
@@ -83,4 +86,17 @@ export function createRequestAuthorizer(dependencies: {
       return member;
     },
   };
+}
+
+function trustedGoogleImage(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      url.hostname === "lh3.googleusercontent.com"
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }

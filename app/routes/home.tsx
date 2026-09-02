@@ -21,13 +21,14 @@ import { normalizeView } from "../features/chore-relay/model";
 import { cloudflareContext } from "../runtime/context";
 import type { RuntimeConfig } from "../runtime/environment";
 import type { Route } from "./+types/home";
+import { useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "ChoRotate · Chore Relay" },
+    { title: "ChoRotate" },
     {
       name: "description",
-      content: "Clear weekly chore handoffs for your household.",
+      content: "Private household chore schedule.",
     },
   ];
 }
@@ -116,6 +117,24 @@ export async function loader({
 }: Route.LoaderArgs): Promise<HomeLoaderData> {
   const runtime = context.get(cloudflareContext);
   return loadHomeData(request, runtime.env.DB, runtime.config);
+}
+
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs): boolean {
+  if (formMethod || currentUrl.pathname !== nextUrl.pathname)
+    return defaultShouldRevalidate;
+  const current = new URLSearchParams(currentUrl.search);
+  const next = new URLSearchParams(nextUrl.search);
+  const viewChanged = current.get("view") !== next.get("view");
+  current.delete("view");
+  next.delete("view");
+  return viewChanged && current.toString() === next.toString()
+    ? false
+    : defaultShouldRevalidate;
 }
 
 export type HomeActionData =
@@ -339,16 +358,13 @@ export async function action({
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
+  const activeView = normalizeView(
+    new URLSearchParams(useLocation().search).get("view"),
+  );
   if (loaderData.state !== "ready") {
-    return (
-      <ChoreRelayShell activeView={loaderData.view} state={loaderData.state} />
-    );
+    return <ChoreRelayShell activeView={activeView} state={loaderData.state} />;
   }
   return (
-    <ChoreRelayShell
-      activeView={loaderData.view}
-      state="ready"
-      data={loaderData}
-    />
+    <ChoreRelayShell activeView={activeView} state="ready" data={loaderData} />
   );
 }

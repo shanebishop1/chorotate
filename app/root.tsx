@@ -10,15 +10,33 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  { rel: "manifest", href: "/manifest.webmanifest" },
+  { rel: "icon", href: "/app-icon.svg", type: "image/svg+xml" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+];
+
+const themeScript = `(()=>{try{const s=localStorage.getItem("chorotate-theme");const t=s==="light"||s==="dark"?s:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",t==="dark"?"#111310":"#f3f1eb")}catch{}})()`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#f3f1eb" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="ChoRotate" />
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <Meta />
         <Links />
       </head>

@@ -45,6 +45,38 @@ describe("auth access boundary", () => {
     expect(lookup).toHaveBeenCalledWith("member@example.com", "user-1");
   });
 
+  it("projects only Google-hosted profile images onto an authorized member", async () => {
+    const authorize = createRequestAuthorizer({
+      readSession: async () => ({
+        ...session,
+        imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
+      }),
+      lookup: async () => member,
+    });
+
+    await expect(
+      authorize.requireAuthorizedMember(
+        new Request("https://app.example.test"),
+      ),
+    ).resolves.toEqual({
+      ...member,
+      imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
+    });
+
+    const untrusted = createRequestAuthorizer({
+      readSession: async () => ({
+        ...session,
+        imageUrl: "https://images.example.invalid/profile-photo",
+      }),
+      lookup: async () => member,
+    });
+    await expect(
+      untrusted.requireAuthorizedMember(
+        new Request("https://app.example.test"),
+      ),
+    ).resolves.toEqual(member);
+  });
+
   it("denies a non-allowlisted authenticated identity", async () => {
     const authorize = createRequestAuthorizer({
       readSession: async () => session,

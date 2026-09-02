@@ -10,7 +10,7 @@ import { AuthorizationError, type AuthorizedMember } from "../auth/access";
 import type { D1DatabaseLike, D1StatementLike } from "../domain/storage/d1";
 import { prepareCurrentSchedule } from "../domain/rotation/prepare";
 import type { RuntimeConfig } from "../runtime/environment";
-import { loadHomeData, runHomeAction } from "./home";
+import { loadHomeData, runHomeAction, shouldRevalidate } from "./home";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const actor: AuthorizedMember = {
@@ -43,6 +43,19 @@ const config = {
     googleClientSecret: "test",
   },
 } satisfies RuntimeConfig;
+
+describe("home view navigation", () => {
+  it("does not reload private schedule data for a view-only query change", () => {
+    expect(
+      shouldRevalidate({
+        currentUrl: new URL("https://app.example.test/?view=now"),
+        nextUrl: new URL("https://app.example.test/?view=history"),
+        formMethod: undefined,
+        defaultShouldRevalidate: true,
+      } as Parameters<typeof shouldRevalidate>[0]),
+    ).toBe(false);
+  });
+});
 
 class LocalStatement implements D1StatementLike {
   private values: SQLInputValue[] = [];

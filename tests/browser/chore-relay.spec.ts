@@ -2,10 +2,10 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const views = [
-  ["now", "The handoff starts here"],
-  ["mine", "Member D’s turns"],
-  ["household", "The whole household, in motion"],
-  ["history", "Every handoff, kept together"],
+  ["now", "On duty"],
+  ["mine", "Your upcoming chores"],
+  ["household", "Household schedule"],
+  ["history", "Recent changes"],
 ] as const;
 
 for (const [view, heading] of views) {
@@ -36,6 +36,28 @@ for (const [view, heading] of views) {
   });
 }
 
+test("view links navigate without replacing the document", async ({ page }) => {
+  await page.goto("/?view=now");
+  await page.evaluate(() => {
+    (window as typeof window & { navigationMarker?: string }).navigationMarker =
+      "preserved";
+  });
+
+  await page.getByRole("link", { name: "Mine" }).click();
+
+  await expect(page).toHaveURL(/\?view=mine$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Your upcoming chores" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { navigationMarker?: string })
+          .navigationMarker,
+    ),
+  ).toBe("preserved");
+});
+
 test("sign out uses the Better Auth JSON request contract", async ({
   page,
 }) => {
@@ -49,12 +71,31 @@ test("sign out uses the Better Auth JSON request contract", async ({
   await page.goto("/?view=now");
 
   const requestPromise = page.waitForRequest("**/api/auth/sign-out");
+  await page.getByRole("button", { name: "Open profile menu" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   const request = await requestPromise;
 
   expect(request.method()).toBe("POST");
   expect(request.headers()["content-type"]).toBe("application/json");
   expect(request.postDataJSON()).toEqual({});
+});
+
+test("profile control uses an available Google image and hides account actions", async ({
+  page,
+}) => {
+  await page.route("https://lh3.googleusercontent.com/**", (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await page.goto("/?view=now");
+
+  const profile = page.getByRole("button", { name: "Open profile menu" });
+  await expect(profile.locator("img")).toHaveAttribute(
+    "src",
+    "https://lh3.googleusercontent.com/a/profile-photo",
+  );
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
+  await profile.click();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
 test("dialog fits, exposes review semantics, and restores keyboard focus", async ({
@@ -182,6 +223,22 @@ test("the chronological household schedule reflows at 320px", async ({
   for (const select of await page.getByRole("combobox").all()) {
     expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
+});
+
+test("history hides internal IDs and fits at 320px", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/?view=history");
+
+  await expect(page.locator("main")).not.toContainText(
+    "123e4567-e89b-12d3-a456-426614174000",
+  );
+  const fit = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+    shellWidth: document.querySelector(".app-shell")?.scrollWidth,
+  }));
+  expect(fit.documentWidth).toBeLessThanOrEqual(fit.viewportWidth);
+  expect(fit.shellWidth).toBeLessThanOrEqual(fit.viewportWidth);
 });
 
 test("atomic swap dialog reviews both legs and keeps its action fitted", async ({
@@ -324,10 +381,16 @@ test("theme control switches the rendered shell independently of system mode", a
   colorScheme,
 }) => {
   await page.goto("/?view=household");
-  const shell = page.locator(".app-shell");
-  await page.getByRole("button", { name: "Toggle color mode" }).click();
-  await expect(shell).toHaveAttribute(
-    "data-theme",
-    colorScheme === "dark" ? "light" : "dark",
+  const target = colorScheme === "dark" ? "light" : "dark";
+  const control = page.getByRole("button", {
+    name: `Switch to ${target} mode`,
+  });
+  await control.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", target);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
+    "content",
+    target === "dark" ? "#111310" : "#f3f1eb",
   );
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", target);
 });

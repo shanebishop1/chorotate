@@ -157,6 +157,7 @@ export function createBetterAuth(
         sessionId: result.session.id,
         userId: result.user.id,
         email: result.user.email,
+        imageUrl: result.user.image ?? undefined,
       };
     },
   };

@@ -109,7 +109,12 @@ const historyAssignments = chores.map((chore) =>
 );
 
 const data: ChoreRelayData = {
-  signedInMember: { id: "member-d", householdId: "home", displayName: "Member D" },
+  signedInMember: {
+    id: "member-d",
+    householdId: "home",
+    displayName: "Member D",
+    imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
+  },
   current: {
     state: "ready",
     handoffs: chores.map((chore) => ({
@@ -156,7 +161,7 @@ const data: ChoreRelayData = {
     page: { limit: 25, offset: 0, nextOffset: null },
     operations: [
       {
-        operationId: "swap-1",
+        operationId: "operation:123e4567-e89b-12d3-a456-426614174000",
         requestId: "request-1",
         kind: "swap",
         occurredAt: "2026-08-31T14:00:00Z",
@@ -224,6 +229,8 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).toContain("Empty the completed dishwasher.");
     expect(html).toContain("Hands off next");
     expect(html).not.toContain("Mock workspace");
+    expect(html).not.toContain("The handoff starts here");
+    expect(html).not.toContain("Every turn keeps its own dates");
   });
 
   it("renders each chore's own current and next period at the handoff", () => {
@@ -242,7 +249,10 @@ describe("Chore Relay integrated rendering", () => {
   });
 
   it("renders chronological Mine and responsive Household representations", () => {
-    expect(render("mine")).toContain("Member D’s turns");
+    const mine = render("mine");
+    expect(mine).toContain("Your upcoming chores");
+    expect(mine).not.toContain("Your lane");
+    expect(mine).not.toContain("Personal route");
     const household = render("household");
     expect(household).toContain("<table");
     expect(household).toContain("<caption");
@@ -276,6 +286,7 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).toContain("Fri, Aug 28 – Thu, Sep 3");
     expect(html).toContain("Mon, Aug 31 – Sun, Sep 6");
     expect(html).toContain("Recorded by");
+    expect(html).not.toContain("123e4567-e89b-12d3-a456-426614174000");
   });
 
   it("surfaces correction-needed History evidence without sensitive delivery details", () => {
@@ -295,16 +306,26 @@ describe("Chore Relay integrated rendering", () => {
     expect(unavailable).not.toContain("Take the trash");
   });
 
-  it("renders an authenticated sign-out control with accessible status feedback", () => {
+  it("places account actions behind a compact profile control", () => {
     const html = render("now");
+    expect(html).toContain("Open profile menu");
     expect(html).toContain("Sign out");
+    expect(html).toContain("https://lh3.googleusercontent.com/a/profile-photo");
     expect(html).toContain('aria-live="polite"');
   });
 
   it("emits theme and mobile/desktop controls in server-rendered markup", () => {
     const html = render("household");
-    expect(html).toContain("Toggle color mode");
+    expect(html).toContain("Switch color mode");
     expect(html).toContain("schedule-table-wrap");
     expect(html).toContain("schedule-list");
+  });
+
+  it("omits promotional and legal footer content", () => {
+    const html = render("now");
+    expect(html).not.toContain("One home. Clear handoffs");
+    expect(html).not.toContain("Authoritative household schedule");
+    expect(html).not.toContain('href="/privacy"');
+    expect(html).not.toContain('href="/terms"');
   });
 });

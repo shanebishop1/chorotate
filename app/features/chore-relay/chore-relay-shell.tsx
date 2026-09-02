@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 
 import type { AuthorizedMember } from "../../auth/access";
 import type {
@@ -53,71 +53,80 @@ const labels: Record<ChoreRelayView, string> = {
 
 export function ChoreRelayShell(props: Props) {
   const [theme, setTheme] = useState<Theme>();
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const current = effectiveTheme();
+      document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute("content", current === "dark" ? "#111310" : "#f3f1eb");
+      setTheme(current);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
   function toggleTheme() {
-    const current =
-      theme ??
-      (typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light");
-    setTheme(current === "dark" ? "light" : "dark");
+    const next = (theme ?? effectiveTheme()) === "dark" ? "light" : "dark";
+    applyTheme(next);
+    setTheme(next);
   }
   return (
-    <div className="app-shell" data-theme={theme}>
+    <div className="app-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       <header className="site-header">
         <div className="header-row">
-          <a
+          <Link
             className="brand"
-            href="?view=now"
+            to="?view=now"
             aria-label="ChoRotate, go to Now"
           >
             <span className="brand-mark" aria-hidden="true">
-              <span />
-              <span />
-              <span />
+              <Icon name="brand" />
             </span>
             <span>ChoRotate</span>
-          </a>
+          </Link>
           <div className="header-actions">
             {props.state === "ready" ? (
-              <>
-                <div className="signed-in">
-                  <Person
-                    member={toProjected(props.data.signedInMember)}
-                    size="small"
-                  />
-                  <span>
-                    <small>Home crew</small>
-                    <strong>{props.data.signedInMember.displayName}</strong>
-                  </span>
-                </div>
-                <AuthControl kind="sign-out" />
-              </>
+              <ProfileMenu member={props.data.signedInMember} />
             ) : null}
             <button
-              className="icon-button"
+              className="icon-button theme-toggle"
               type="button"
               onClick={toggleTheme}
-              aria-label="Toggle color mode"
-              title="Switch color mode"
+              aria-label={
+                theme
+                  ? `Switch to ${theme === "dark" ? "light" : "dark"} mode`
+                  : "Switch color mode"
+              }
+              title={
+                theme
+                  ? `Switch to ${theme === "dark" ? "light" : "dark"} mode`
+                  : "Switch color mode"
+              }
             >
-              <Icon name={theme === "dark" ? "sun" : "moon"} />
+              <span className="theme-icon theme-icon-light">
+                <Icon name="moon" />
+              </span>
+              <span className="theme-icon theme-icon-dark">
+                <Icon name="sun" />
+              </span>
             </button>
           </div>
         </div>
         <nav className="primary-nav" aria-label="ChoRotate views">
           {views.map((view) => (
-            <a
+            <Link
               key={view}
-              href={`?view=${view}`}
+              to={`?view=${view}`}
+              preventScrollReset
               aria-current={props.activeView === view ? "page" : undefined}
             >
               <Icon name={view} />
               <span>{labels[view]}</span>
-            </a>
+            </Link>
           ))}
         </nav>
       </header>
@@ -132,16 +141,25 @@ export function ChoreRelayShell(props: Props) {
           <SystemState kind="unavailable" />
         )}
       </main>
-      <footer className="site-footer">
-        <p>One home. Clear handoffs. No chore left between people.</p>
-        <nav className="footer-links" aria-label="Service information">
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-          <span>Authoritative household schedule</span>
-        </nav>
-      </footer>
     </div>
   );
+}
+
+function effectiveTheme(): Exclude<Theme, undefined> {
+  const documentTheme = document.documentElement.dataset.theme;
+  if (documentTheme === "light" || documentTheme === "dark")
+    return documentTheme;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function applyTheme(theme: Exclude<Theme, undefined>) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("chorotate-theme", theme);
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", theme === "dark" ? "#111310" : "#f3f1eb");
 }
 
 function ReadyShell({
@@ -266,23 +284,17 @@ function ReadyShell({
 }
 
 function ViewHeading({
-  eyebrow,
   title,
-  detail,
+  id,
   action,
 }: {
-  eyebrow: string;
   title: string;
-  detail: string;
+  id: string;
   action?: React.ReactNode;
 }) {
   return (
     <header className="view-heading">
-      <div>
-        <p className="eyebrow">{eyebrow}</p>
-        <h1>{title}</h1>
-        <p>{detail}</p>
-      </div>
+      <h1 id={id}>{title}</h1>
       {action}
     </header>
   );
@@ -304,18 +316,14 @@ function NowView({
   return (
     <section aria-labelledby="now-title">
       <ViewHeading
-        eyebrow="Current handoffs"
-        title="The handoff starts here"
-        detail="See who has each chore now, and who takes the baton next."
+        id="now-title"
+        title="On duty"
         action={
           <button className="button secondary" type="button" onClick={onSwap}>
             <Icon name="swap" /> Swap two turns
           </button>
         }
       />
-      <h2 id="now-title" className="section-label">
-        Current and next turns
-      </h2>
       <div className="handoff-grid">
         {current.handoffs.map(
           ({ chore, currentPeriod, nextPeriod, current: assignment, next }) =>
@@ -362,19 +370,6 @@ function NowView({
             ) : null,
         )}
       </div>
-      <aside className="coming-up" aria-label="Planning chore handoffs">
-        <span className="date-block" aria-hidden="true">
-          <Icon name="calendar" />
-        </span>
-        <div>
-          <p className="eyebrow">Plan ahead</p>
-          <h2>Every turn keeps its own dates</h2>
-          <p>Trash and Dishwasher hand off on different days.</p>
-        </div>
-        <a href="?view=household">
-          See four turns <span aria-hidden="true">→</span>
-        </a>
-      </aside>
     </section>
   );
 }
@@ -382,19 +377,11 @@ function NowView({
 function MineView({ data }: { data: ChoreRelayData }) {
   return (
     <section aria-labelledby="mine-title">
-      <ViewHeading
-        eyebrow="Your lane"
-        title={`${data.signedInMember.displayName}’s turns`}
-        detail="A quiet view of what is yours now and what is coming around."
-      />
       <div className="mine-summary">
         <Person member={toProjected(data.signedInMember)} />
         <div>
-          <span className="status-mark">
-            <Icon name="check" /> Personal route
-          </span>
-          <h2 id="mine-title">Your upcoming handoffs</h2>
-          <p>Each chore keeps its own start and end dates.</p>
+          <h1 id="mine-title">Your upcoming chores</h1>
+          <p>{data.signedInMember.displayName}</p>
         </div>
       </div>
       {data.mine.state === "empty" ? (
@@ -448,11 +435,7 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
   );
   return (
     <section aria-labelledby="household-title">
-      <ViewHeading
-        eyebrow="Upcoming route"
-        title="The whole household, in motion"
-        detail="Each row is its own relay. Every assignment names its chore-specific dates."
-      />
+      <ViewHeading id="household-title" title="Household schedule" />
       <div className="filter-row" aria-label="Schedule filters">
         <label>
           Member
@@ -483,9 +466,6 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
           </select>
         </label>
       </div>
-      <h2 id="household-title" className="section-label">
-        Household schedule
-      </h2>
       {data.household.state === "empty" ? (
         <SystemState kind="empty" />
       ) : (
@@ -593,14 +573,7 @@ function HistoryView({
 }) {
   return (
     <section aria-labelledby="history-title">
-      <ViewHeading
-        eyebrow="Change trail"
-        title="Every handoff, kept together"
-        detail="Direct changes stand alone. Atomic swaps keep both legs in one group."
-      />
-      <h2 id="history-title" className="section-label">
-        Latest changes
-      </h2>
+      <ViewHeading id="history-title" title="Recent changes" />
       {history.state === "empty" ? (
         <SystemState kind="empty" />
       ) : (
@@ -661,7 +634,6 @@ function HistoryItem({ operation }: { operation: HistoryOperation }) {
         <footer>
           Recorded by{" "}
           <strong>{operation.actor?.displayName ?? "ChoRotate"}</strong>
-          <code>{operation.operationId}</code>
         </footer>
       </article>
     </li>
@@ -1033,16 +1005,24 @@ function SwapLeg({
 }) {
   return (
     <div className="swap-leg">
-      <span>Leg {index}</span>
-      <div>
+      <header>
+        <span>Leg {index}</span>
         <strong>{assignment.chore.name}</strong>
         <PeriodRange range={assignment.period} label="Ownership range" />
+      </header>
+      <div className="swap-route">
+        <span>
+          <Person member={assignment.member} size="small" />
+          <small>Outgoing</small>
+          <strong>{assignment.member.displayName}</strong>
+        </span>
+        <i aria-hidden="true">→</i>
+        <span>
+          <Person member={to} size="small" />
+          <small>Incoming</small>
+          <strong>{to.displayName}</strong>
+        </span>
       </div>
-      <p>
-        <span>Outgoing: {assignment.member.displayName}</span>{" "}
-        <span aria-hidden="true">→</span>{" "}
-        <span>Incoming: {to.displayName}</span>
-      </p>
     </div>
   );
 }
@@ -1190,6 +1170,50 @@ function MaterializeControl() {
   );
 }
 
+function ProfileMenu({ member }: { member: AuthorizedMember }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        menuRef.current
+          ?.querySelector<HTMLButtonElement>(".profile-trigger")
+          ?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeWithEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [open]);
+  return (
+    <div className="profile-menu" ref={menuRef}>
+      <button
+        className="profile-trigger"
+        type="button"
+        aria-label="Open profile menu"
+        aria-expanded={open}
+        aria-controls="profile-popover"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Person member={toProjected(member)} size="small" />
+        <Icon name="chevron" />
+      </button>
+      <div className="profile-popover" id="profile-popover" hidden={!open}>
+        <strong>{member.displayName}</strong>
+        <AuthControl kind="sign-out" />
+      </div>
+    </div>
+  );
+}
+
 function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
   const [state, setState] = useState<"idle" | "pending" | "error">("idle");
   const signIn = kind === "sign-in";
@@ -1261,7 +1285,12 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
 }
 
 function toProjected(member: AuthorizedMember): ProjectedMember {
-  return { id: member.id, displayName: member.displayName, active: true };
+  return {
+    id: member.id,
+    displayName: member.displayName,
+    active: true,
+    imageUrl: member.imageUrl,
+  };
 }
 function unique<T>(items: T[], key: (item: T) => string): T[] {
   const seen = new Set<string>();
@@ -1281,12 +1310,7 @@ function chronological(items: ProjectedAssignment[]): ProjectedAssignment[] {
   );
 }
 function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  return name.trim().charAt(0).toUpperCase();
 }
 function cueClass(id: string): string {
   const cues = ["member-a", "member-b", "member-c", "member-d"];
@@ -1307,6 +1331,18 @@ function Person({
       aria-hidden="true"
     >
       <span>{initials(member.displayName)}</span>
+      {member.imageUrl ? (
+        <img
+          src={member.imageUrl}
+          alt=""
+          width="50"
+          height="50"
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
     </span>
   );
 }
@@ -1451,10 +1487,16 @@ function formatLocalTimestamp(value: string): string {
 }
 function Icon({ name }: { name: string }) {
   const paths: Record<string, React.ReactNode> = {
+    brand: (
+      <>
+        <path d="M7 8a7 7 0 0 1 11-1l2-1v6h-6l2-2a4.2 4.2 0 0 0-6.8.2" />
+        <path d="M17 16a7 7 0 0 1-11 1l-2 1v-6h6l-2 2a4.2 4.2 0 0 0 6.8-.2" />
+      </>
+    ),
     now: (
       <>
-        <circle cx="12" cy="12" r="8" />
-        <path d="M12 7v5l3 2" />
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="m9 12 2 2 4-5" />
       </>
     ),
     mine: (
@@ -1465,15 +1507,17 @@ function Icon({ name }: { name: string }) {
     ),
     household: (
       <>
-        <path d="m3 11 9-7 9 7" />
-        <path d="M5 10v10h14V10M9 20v-6h6v6" />
+        <circle cx="9" cy="9" r="3" />
+        <circle cx="17" cy="10" r="2.5" />
+        <path d="M3.5 19a5.5 5.5 0 0 1 11 0M14 16a4.5 4.5 0 0 1 6.5 3" />
       </>
     ),
     history: (
       <>
-        <path d="M4 7v5h5" />
-        <path d="M5.5 17a8 8 0 1 0-1.2-7" />
-        <path d="M12 8v4l3 2" />
+        <path d="M8 6h12M8 12h12M8 18h12" />
+        <circle cx="4" cy="6" r=".7" fill="currentColor" stroke="none" />
+        <circle cx="4" cy="12" r=".7" fill="currentColor" stroke="none" />
+        <circle cx="4" cy="18" r=".7" fill="currentColor" stroke="none" />
       </>
     ),
     swap: <path d="M4 8h14l-3-3M20 16H6l3 3" />,
@@ -1484,6 +1528,7 @@ function Icon({ name }: { name: string }) {
         <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
       </>
     ),
+    chevron: <path d="m8 10 4 4 4-4" />,
     trash: (
       <>
         <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
