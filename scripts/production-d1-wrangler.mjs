@@ -44,24 +44,16 @@ export function buildProductionD1OperatorConfig(databaseId) {
 /**
  * @template T
  * @param {Record<string, unknown>} config
- * @param {(paths: {configPath: string, sqlPath?: string}) => Promise<T> | T} operation
- * @param {{sql?: string}} [options]
+ * @param {(paths: {configPath: string}) => Promise<T> | T} operation
  */
-export async function withTemporaryWranglerConfig(
-  config,
-  operation,
-  { sql } = {},
-) {
+export async function withTemporaryWranglerConfig(config, operation) {
   const directory = await mkdtemp(join(tmpdir(), "chorotate-production-"));
   const configPath = join(directory, "wrangler.production.json");
-  const sqlPath = sql === undefined ? undefined : join(directory, "verify.sql");
   try {
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, {
       mode: 0o600,
     });
-    if (sqlPath !== undefined && sql !== undefined)
-      await writeFile(sqlPath, sql, { mode: 0o600 });
-    return await operation({ configPath, sqlPath });
+    return await operation({ configPath });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -77,7 +69,7 @@ export function productionWranglerEnvironment(environment) {
 
 /**
  * @param {string} operation
- * @param {{configPath: string, sqlPath?: string}} paths
+ * @param {{configPath: string, sqlPath?: string, verificationQuery?: string}} paths
  */
 export function buildProductionD1WranglerArgs(operation, paths) {
   const common = ["DB", "--remote", "--config", paths.configPath];
@@ -85,14 +77,17 @@ export function buildProductionD1WranglerArgs(operation, paths) {
     return ["d1", "migrations", "list", ...common];
   if (operation === "migrations-apply")
     return ["d1", "migrations", "apply", ...common];
-  if ((operation === "execute" || operation === "verify") && paths.sqlPath) {
+  if (operation === "execute" && paths.sqlPath) {
+    return ["d1", "execute", ...common, "--file", paths.sqlPath];
+  }
+  if (operation === "verify" && paths.verificationQuery) {
     return [
       "d1",
       "execute",
       ...common,
-      ...(operation === "verify" ? ["--json"] : []),
-      "--file",
-      paths.sqlPath,
+      "--json",
+      "--command",
+      paths.verificationQuery,
     ];
   }
   throw new Error("Unsupported production D1 operation or arguments");

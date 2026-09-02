@@ -203,6 +203,9 @@ check(
     "node scripts/operator-contact-config.mjs --bootstrap" &&
     /buildBootstrapSql/.test(operatorContactTool) &&
     /operator_bootstrap_assert/.test(operatorContactTool) &&
+    /CREATE TABLE operator_bootstrap_assert/.test(operatorContactTool) &&
+    /DROP TABLE operator_bootstrap_assert/.test(operatorContactTool) &&
+    !/CREATE TEMP(?:ORARY)? TABLE/i.test(operatorContactTool) &&
     [
       "INSERT INTO households",
       "INSERT INTO members",
@@ -224,6 +227,10 @@ check(
 check(
   "remote D1 verification is contact-redacted and non-sending",
   /--remote/.test(remoteD1Verification) &&
+    /operation === "verify"/.test(remoteD1Verification) &&
+    /"--command"/.test(remoteD1Verification) &&
+    /operation === "execute"/.test(remoteD1Verification) &&
+    /"--file"/.test(remoteD1Verification) &&
     /exact_active_identities/.test(remoteD1Verification) &&
     /exact_active_members/.test(remoteD1Verification) &&
     /exact_identity_members/.test(remoteD1Verification) &&

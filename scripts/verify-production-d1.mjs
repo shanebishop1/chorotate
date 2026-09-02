@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   buildProductionD1VerificationQuery,
   expectedProductionD1Result,
+  parseProductionD1VerificationOutput,
   productionD1SettingsFromEnvironment,
 } from "./production-d1-contract.mjs";
 import {
@@ -50,12 +51,15 @@ try {
   const databaseId = productionD1DatabaseIdFromEnvironment(process.env);
   result = await withTemporaryWranglerConfig(
     buildProductionD1OperatorConfig(databaseId),
-    ({ configPath, sqlPath }) =>
+    ({ configPath }) =>
       spawnSync(
         process.execPath,
         [
           resolve("node_modules/wrangler/bin/wrangler.js"),
-          ...buildProductionD1WranglerArgs("verify", { configPath, sqlPath }),
+          ...buildProductionD1WranglerArgs("verify", {
+            configPath,
+            verificationQuery,
+          }),
         ],
         {
           encoding: "utf8",
@@ -63,7 +67,6 @@ try {
           env: productionWranglerEnvironment(process.env),
         },
       ),
-    { sql: verificationQuery },
   );
 } catch (error) {
   console.error(
@@ -80,15 +83,8 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
-/** @type {Record<string, unknown> | undefined} */
-let row;
-try {
-  const payload = JSON.parse(result.stdout);
-  row = payload?.[0]?.results?.[0];
-} catch {
-  // Do not include raw provider output: it can contain resource identifiers.
-}
-if (row === null || typeof row !== "object") {
+const row = parseProductionD1VerificationOutput(result.stdout);
+if (row === undefined) {
   console.error(
     "Remote D1 verification returned an unreadable redacted result.",
   );
