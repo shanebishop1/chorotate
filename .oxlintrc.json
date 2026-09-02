@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "plugins": ["react"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "worker": true
+  },
+  "ignorePatterns": [
+    ".react-router/**",
+    ".wrangler/**",
+    "build/**",
+    "node_modules/**",
+    "test-results/**",
+    "worker-configuration.d.ts"
+  ],
+  "rules": {
+    "no-empty-pattern": "off",
+    "no-new": "off",
+    "no-shadow": "off",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "react/react-in-jsx-scope": "off",
+    "react/set-state-in-effect": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx"],
+      "rules": {
+        "no-undef": "off"
+      }
+    }
+  ]
+}

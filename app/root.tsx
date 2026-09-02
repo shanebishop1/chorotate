@@ -16,7 +16,7 @@ export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
 
-const themeScript = `(()=>{try{const s=localStorage.getItem("chorotate-theme");const t=s==="light"||s==="dark"?s:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",t==="dark"?"#111310":"#f3f1eb")}catch{}})()`;
+const themeScript = `(()=>{try{const s=localStorage.getItem("chorotate-theme");const t=s==="light"||s==="dark"?s:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",t==="dark"?"#1d201c":"#fffefa")}catch{}})()`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -28,7 +28,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f3f1eb" />
+        <meta name="theme-color" content="#fffefa" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta

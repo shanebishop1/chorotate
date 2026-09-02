@@ -67,7 +67,7 @@ export function ChoreRelayShell(props: Props) {
       const current = effectiveTheme();
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute("content", current === "dark" ? "#111310" : "#f3f1eb");
+        ?.setAttribute("content", current === "dark" ? "#1d201c" : "#fffefa");
       setTheme(current);
     };
     sync();
@@ -183,7 +183,7 @@ function applyTheme(theme: Exclude<Theme, undefined>) {
   localStorage.setItem("chorotate-theme", theme);
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", theme === "dark" ? "#111310" : "#f3f1eb");
+    ?.setAttribute("content", theme === "dark" ? "#1d201c" : "#fffefa");
 }
 
 function ReadyShell({
@@ -362,17 +362,13 @@ function NowView({
             assignment && next ? (
               <article className="handoff-card" key={assignment.assignmentId}>
                 <div className="card-topline">
-                  <ChoreGlyph choreId={chore.id} />
-                  <div>
+                  <div className="current-person">
+                    <Person member={assignment.member} />
+                    <strong>{assignment.member.displayName}</strong>
+                  </div>
+                  <div className="card-chore">
                     <p className="card-kicker">On duty now</p>
                     <h2>{chore.name}</h2>
-                  </div>
-                </div>
-                <div className="current-person">
-                  <Person member={assignment.member} />
-                  <div>
-                    <strong>{assignment.member.displayName}</strong>
-                    <span>has this turn</span>
                   </div>
                 </div>
                 <PeriodRange range={currentPeriod} label="Current period" />

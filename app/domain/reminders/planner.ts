@@ -4,7 +4,9 @@ const localDateFormatter = new Map<string, Intl.DateTimeFormat>();
 
 type DecimalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 type ReminderHour =
-  `0${DecimalDigit}` | `1${DecimalDigit}` | `2${"0" | "1" | "2" | "3"}`;
+  | `0${DecimalDigit}`
+  | `1${DecimalDigit}`
+  | `2${"0" | "1" | "2" | "3"}`;
 type ReminderMinute = `${"0" | "1" | "2" | "3" | "4" | "5"}${DecimalDigit}`;
 export type ReminderLocalTime = `${ReminderHour}:${ReminderMinute}`;
 export type OccurrencePhase = "evening" | "morning";

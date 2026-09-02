@@ -654,8 +654,13 @@ h3 {
 .card-topline {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
+}
+
+.card-chore {
+  text-align: right;
 }
 
 .card-topline h2 {
@@ -682,14 +687,7 @@ h3 {
 .current-person {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 13px;
-  margin-top: 25px;
-}
-
-.current-person > div {
-  display: flex;
-  flex-direction: column;
+  gap: 10px;
 }
 
 .current-person strong {
@@ -700,7 +698,6 @@ h3 {
   line-height: 1.1;
 }
 
-.current-person span,
 .chore-description {
   color: var(--muted);
   font-size: 0.87rem;
@@ -765,10 +762,6 @@ h3 {
   width: 13px;
   height: 13px;
   stroke-width: 2.2;
-}
-
-.current-person + .period-range {
-  margin-left: 63px;
 }
 
 .chore-description {
@@ -2710,11 +2703,11 @@ body,
 }
 
 html {
-  background: #f3f1eb;
+  background: #fffefa;
 }
 
 html[data-theme="dark"] {
-  background: #111310;
+  background: #1d201c;
 }
 
 body {
@@ -3072,10 +3065,6 @@ html[data-theme="dark"] .theme-icon-dark {
   border-radius: 10px;
 }
 
-.current-person {
-  margin-top: 19px;
-}
-
 .current-person strong {
   font-family: inherit;
   font-size: 1.3rem;
@@ -3319,22 +3308,6 @@ html[data-theme="dark"] .theme-icon-dark {
     padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
   }
 
-  body::after {
-    position: fixed;
-    z-index: 39;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: calc(env(safe-area-inset-bottom) + 1px);
-    background: #fffefa;
-    content: "";
-    pointer-events: none;
-  }
-
-  html[data-theme="dark"] body::after {
-    background: #1d201c;
-  }
-
   .primary-nav a {
     min-height: 53px;
     border-radius: 8px;
@@ -3363,10 +3336,6 @@ html[data-theme="dark"] .theme-icon-dark {
 
   .handoff-card {
     padding: 16px;
-  }
-
-  .current-person + .period-range {
-    margin-left: 0;
   }
 
   .schedule-list {

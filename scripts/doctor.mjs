@@ -59,9 +59,9 @@ for (const tool of ["git", "mise", "node", "npm", "npx"]) {
   check(`tool available: ${tool}`, command(tool, ["--version"]).status === 0);
 }
 for (const tool of [
-  "eslint",
+  "oxfmt",
+  "oxlint",
   "playwright",
-  "prettier",
   "react-router",
   "tsc",
   "vite",

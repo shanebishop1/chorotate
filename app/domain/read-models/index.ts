@@ -88,9 +88,15 @@ export interface ProjectedChore {
 }
 
 export type ReminderContactStatus =
-  "ready" | "missing_contact" | "unconsented" | "suppressed";
+  | "ready"
+  | "missing_contact"
+  | "unconsented"
+  | "suppressed";
 export type ReminderResult =
-  "pending" | "accepted" | "missed" | "delivery_unknown";
+  | "pending"
+  | "accepted"
+  | "missed"
+  | "delivery_unknown";
 export interface ProjectedReminderStatus {
   contactStatus: ReminderContactStatus;
   correctionNeeded: boolean;

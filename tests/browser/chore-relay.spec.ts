@@ -759,7 +759,7 @@ test("theme control switches the rendered shell independently of system mode", a
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    target === "dark" ? "#111310" : "#f3f1eb",
+    target === "dark" ? "#1d201c" : "#fffefa",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);

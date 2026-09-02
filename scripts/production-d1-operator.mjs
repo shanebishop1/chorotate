@@ -36,11 +36,13 @@ export async function parseProductionD1OperatorArgs(args) {
   }
   const sqlPath = await realpath(resolve(args[2]));
   const relation = relative(repositoryRoot, sqlPath);
-  if (!(
-    isAbsolute(relation) ||
-    relation === ".." ||
-    relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
-  )) {
+  if (
+    !(
+      isAbsolute(relation) ||
+      relation === ".." ||
+      relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    )
+  ) {
     throw new Error("Private SQL path must be outside the repository");
   }
   const sqlStat = await stat(sqlPath);

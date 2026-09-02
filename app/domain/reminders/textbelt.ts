@@ -19,7 +19,8 @@ export interface TextbeltFailureResponse {
 }
 
 export type TextbeltResponse =
-  TextbeltSuccessResponse | TextbeltFailureResponse;
+  | TextbeltSuccessResponse
+  | TextbeltFailureResponse;
 
 export interface TextbeltTransport {
   send(input: TextbeltSmsInput): Promise<TextbeltResponse>;

@@ -40,7 +40,10 @@ export interface Assignment {
 }
 
 export type AssignmentOperationKind =
-  "materialize" | "reassign" | "swap" | "correct";
+  | "materialize"
+  | "reassign"
+  | "swap"
+  | "correct";
 
 export interface OperationContext {
   operationId: OperationId;

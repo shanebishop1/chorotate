@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    ".beads/**",
+    ".exaskill/**",
+    ".react-router/**",
+    "build/**",
+    "docs/**",
+    "node_modules/**",
+    "public/**",
+    "worker-configuration.d.ts",
+    "app/**/*.css",
+    "app/**/*.svg"
+  ]
+}
