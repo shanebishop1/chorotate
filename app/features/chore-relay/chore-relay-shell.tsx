@@ -1869,7 +1869,9 @@ function Icon({ name }: { name: string }) {
         <path d="M18 17H6m0 0 3 3m-3-3 3-3" />
       </>
     ),
-    moon: <path d="M20 15a8 8 0 1 1-11-11 7 7 0 0 0 11 11Z" />,
+    moon: (
+      <path d="M20.5 14.3A8.5 8.5 0 0 1 9.7 3.5a8.5 8.5 0 1 0 10.8 10.8Z" />
+    ),
     sun: (
       <>
         <circle cx="12" cy="12" r="3.5" />
