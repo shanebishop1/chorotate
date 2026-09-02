@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher } from "react-router";
+import { Link, useFetcher, useNavigation } from "react-router";
 
 import type { AuthorizedMember } from "../../auth/access";
 import type {
@@ -17,6 +17,7 @@ import type { HomeActionData } from "../../routes/home";
 import { views, type ChorePeriodRange, type ChoreRelayView } from "./model";
 import type { HouseholdRange } from "./model";
 import { MiniCalendar } from "./mini-calendar";
+import { CustomDropdown, type DropdownOption } from "./custom-dropdown";
 
 export interface ChoreRelayData {
   signedInMember: AuthorizedMember;
@@ -28,6 +29,7 @@ export interface ChoreRelayData {
   household: Awaited<ReturnType<typeof getHouseholdCalendar>>;
   history: Awaited<ReturnType<typeof getGroupedHistory>>;
   activeMembers: ProjectedMember[];
+  assignmentCandidates: ProjectedAssignment[];
 }
 
 type Props =
@@ -43,6 +45,8 @@ type DialogState = (
       kind: "reassign";
       assignmentId: string;
       recipientId: string;
+      step: "recipient" | "review";
+      balanceAssignmentId: string;
       requestId: string;
     }
   | { kind: "swap"; firstId: string; secondId: string; requestId: string }
@@ -246,6 +250,8 @@ function ReadyShell({
       kind: "reassign",
       assignmentId,
       recipientId: "",
+      step: "recipient",
+      balanceAssignmentId: "",
       requestId: `request:${crypto.randomUUID()}`,
     });
   }
@@ -259,16 +265,31 @@ function ReadyShell({
       requestId: `request:${crypto.randomUUID()}`,
     });
   }
-  const assignments = data.household.periods.flatMap(
-    ({ assignments }) => assignments,
+  const assignments = unique(
+    [
+      ...data.assignmentCandidates,
+      ...data.householdList.items,
+      ...data.household.periods.flatMap((period) => period.assignments),
+      ...(data.current.state === "ready"
+        ? data.current.handoffs.flatMap(({ current, next }) =>
+            [current, next].filter(
+              (assignment): assignment is ProjectedAssignment =>
+                assignment !== null,
+            ),
+          )
+        : []),
+    ],
+    (assignment) => assignment.assignmentId,
   );
   return (
     <>
       {activeView === "now" ? (
-        <NowView data={data} onReassign={reassign} onSwap={swap} />
+        <NowView data={data} onReassign={reassign} />
       ) : null}
       {activeView === "mine" ? <MineView data={data} /> : null}
-      {activeView === "household" ? <HouseholdView data={data} /> : null}
+      {activeView === "household" ? (
+        <HouseholdView data={data} onReassign={reassign} onSwap={swap} />
+      ) : null}
       {activeView === "history" ? <HistoryView history={data.history} /> : null}
       {notice ? (
         <div className="toast" role="status">
@@ -289,11 +310,12 @@ function ReadyShell({
           dialog={dialog}
           assignments={assignments}
           members={data.activeMembers}
+          localToday={data.localToday}
           fetcher={fetcher}
           issue={issue}
           onChange={(next) => {
             setDialog(next);
-            if (issue?.state !== "conflict") setIssue(undefined);
+            setIssue(undefined);
           }}
           onReviewConflict={setDialog}
           onClose={close}
@@ -323,11 +345,9 @@ function ViewHeading({
 function NowView({
   data,
   onReassign,
-  onSwap,
 }: {
   data: ChoreRelayData;
   onReassign(id: string): void;
-  onSwap(): void;
 }) {
   const { current } = data;
   if (current.state === "empty") return <SystemState kind="empty" />;
@@ -335,15 +355,7 @@ function NowView({
     return <SystemState kind="unavailable" />;
   return (
     <section aria-labelledby="now-title">
-      <ViewHeading
-        id="now-title"
-        title="On duty"
-        action={
-          <button className="button secondary" type="button" onClick={onSwap}>
-            <Icon name="swap" /> Swap two turns
-          </button>
-        }
-      />
+      <ViewHeading id="now-title" title="On duty" />
       <div className="handoff-grid">
         {current.handoffs.map(
           ({ chore, currentPeriod, nextPeriod, current: assignment, next }) =>
@@ -442,9 +454,26 @@ function MineView({ data }: { data: ChoreRelayData }) {
   );
 }
 
-function HouseholdView({ data }: { data: ChoreRelayData }) {
+function HouseholdView({
+  data,
+  onReassign,
+  onSwap,
+}: {
+  data: ChoreRelayData;
+  onReassign(assignmentId: string): void;
+  onSwap(): void;
+}) {
   const [memberId, setMemberId] = useState("");
   const [choreId, setChoreId] = useState("");
+  const navigation = useNavigation();
+  const pendingRange =
+    navigation.state !== "idle" && navigation.location
+      ? new URLSearchParams(navigation.location.search).get("range") === "all"
+        ? "all"
+        : "upcoming"
+      : undefined;
+  const visibleRange = pendingRange ?? data.householdRange;
+  const rangePending = pendingRange !== undefined;
   const chores = unique(
     data.householdList.items.map(({ chore }) => chore),
     ({ id }) => id,
@@ -465,55 +494,76 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
       (!memberId || item.member.id === memberId) &&
       (!choreId || item.chore.id === choreId),
   );
+  const memberOptions: DropdownOption[] = [
+    { value: "", label: "Everyone" },
+    ...data.activeMembers.map((member) => ({
+      value: member.id,
+      label: member.displayName,
+    })),
+  ];
+  const choreOptions: DropdownOption[] = [
+    { value: "", label: "All chores" },
+    ...chores.map((chore) => ({ value: chore.id, label: chore.name })),
+  ];
   return (
     <section aria-labelledby="household-title">
-      <ViewHeading id="household-title" title="Household schedule" />
-      <nav className="range-control" aria-label="Schedule range">
+      <ViewHeading
+        id="household-title"
+        title="Household schedule"
+        action={
+          <button className="button secondary" type="button" onClick={onSwap}>
+            <Icon name="swap" /> Swap two turns
+          </button>
+        }
+      />
+      <nav
+        className="range-control"
+        aria-label="Schedule range"
+        aria-busy={rangePending}
+      >
         <Link
           to="?view=household&range=upcoming"
           preventScrollReset
-          aria-current={data.householdRange === "upcoming" ? "page" : undefined}
+          prefetch="render"
+          aria-current={visibleRange === "upcoming" ? "page" : undefined}
         >
           Upcoming
         </Link>
         <Link
           to="?view=household&range=all"
           preventScrollReset
-          aria-current={data.householdRange === "all" ? "page" : undefined}
+          prefetch="render"
+          aria-current={visibleRange === "all" ? "page" : undefined}
         >
           All time
         </Link>
+        <span
+          className={`range-busy ${rangePending ? "is-visible" : ""}`}
+          aria-hidden="true"
+        />
       </nav>
       <div className="filter-row" aria-label="Schedule filters">
-        <label>
-          Member
-          <select
-            value={memberId}
-            onChange={(event) => setMemberId(event.target.value)}
-          >
-            <option value="">Everyone</option>
-            {data.activeMembers.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Chore
-          <select
-            value={choreId}
-            onChange={(event) => setChoreId(event.target.value)}
-          >
-            <option value="">All chores</option>
-            {chores.map((chore) => (
-              <option key={chore.id} value={chore.id}>
-                {chore.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CustomDropdown
+          id="member-filter"
+          label="Member"
+          value={memberId}
+          options={memberOptions}
+          onChange={setMemberId}
+        />
+        <CustomDropdown
+          id="chore-filter"
+          label="Chore"
+          value={choreId}
+          options={choreOptions}
+          onChange={setChoreId}
+        />
       </div>
+      {data.householdRange === "all" ? (
+        <TurnTallies
+          assignments={data.householdList.items}
+          truncated={data.householdList.page.nextOffset !== null}
+        />
+      ) : null}
       {(data.householdRange === "all"
         ? data.householdList.state
         : data.household.state) === "empty" ? (
@@ -558,22 +608,20 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
                               <strong>{assignment.chore.name}</strong>
                             </div>
                           </td>
-                          <td>
-                            <div className="schedule-person">
-                              <Person member={assignment.member} size="small" />
-                              <div>
-                                <strong>{assignment.member.displayName}</strong>
-                                <span className="assignment-source">
-                                  {assignment.source === "rotation"
-                                    ? "Rotation"
-                                    : "Changed"}
-                                </span>
-                              </div>
-                            </div>
-                            {current ? (
-                              <span className="now-badge">Current turn</span>
-                            ) : null}
-                            <ReminderStatus reminder={assignment.reminder} />
+                          <td className="on-duty-cell">
+                            <button
+                              className="schedule-assignment-button"
+                              type="button"
+                              aria-label={assignmentActionLabel(assignment)}
+                              onClick={() =>
+                                onReassign(assignment.assignmentId)
+                              }
+                            >
+                              <AssignmentOwner
+                                assignment={assignment}
+                                current={current}
+                              />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -595,16 +643,23 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
                       data-period-start={assignment.period.localStartDate}
                       className={current ? "is-current" : undefined}
                     >
-                      <ChoreGlyph choreId={assignment.chore.id} />
-                      <div>
-                        <small>{assignment.chore.name}</small>
-                        <strong>{assignment.member.displayName}</strong>
-                        <PeriodRange range={assignment.period} />
-                        {current ? (
-                          <span className="now-badge">Current turn</span>
-                        ) : null}
-                        <ReminderStatus reminder={assignment.reminder} />
-                      </div>
+                      <button
+                        className="schedule-card-button"
+                        type="button"
+                        aria-label={assignmentActionLabel(assignment)}
+                        onClick={() => onReassign(assignment.assignmentId)}
+                      >
+                        <ChoreGlyph choreId={assignment.chore.id} />
+                        <div>
+                          <small>{assignment.chore.name}</small>
+                          <strong>{assignment.member.displayName}</strong>
+                          <PeriodRange range={assignment.period} />
+                          {current ? (
+                            <span className="now-badge">Current turn</span>
+                          ) : null}
+                          <ReminderStatus reminder={assignment.reminder} />
+                        </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -619,6 +674,72 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
           )}
         </>
       )}
+    </section>
+  );
+}
+
+function AssignmentOwner({
+  assignment,
+  current,
+}: {
+  assignment: ProjectedAssignment;
+  current: boolean;
+}) {
+  return (
+    <>
+      <div className="schedule-person">
+        <Person member={assignment.member} size="small" />
+        <div>
+          <strong>{assignment.member.displayName}</strong>
+          <span className="assignment-source">
+            {assignment.source === "rotation" ? "Rotation" : "Changed"}
+          </span>
+        </div>
+      </div>
+      {current ? <span className="now-badge">Current turn</span> : null}
+      <ReminderStatus reminder={assignment.reminder} />
+    </>
+  );
+}
+
+function assignmentActionLabel(assignment: ProjectedAssignment): string {
+  return `Reassign ${assignment.chore.name}, ${formatPeriod(assignment.period)}, assigned to ${assignment.member.displayName}`;
+}
+
+function TurnTallies({
+  assignments,
+  truncated,
+}: {
+  assignments: ProjectedAssignment[];
+  truncated: boolean;
+}) {
+  const counts = new Map<string, { member: ProjectedMember; turns: number }>();
+  for (const assignment of assignments) {
+    const current = counts.get(assignment.member.id);
+    counts.set(assignment.member.id, {
+      member: assignment.member,
+      turns: (current?.turns ?? 0) + 1,
+    });
+  }
+  const tallies = [...counts.values()].sort((left, right) =>
+    left.member.displayName.localeCompare(right.member.displayName),
+  );
+  return (
+    <section className="turn-tallies" aria-labelledby="turn-tallies-title">
+      <h2 id="turn-tallies-title">
+        {truncated ? "Turns in assignments shown" : "Turns in All time"}
+      </h2>
+      <ul>
+        {tallies.map(({ member, turns }) => (
+          <li key={member.id}>
+            <Person member={member} size="tiny" />
+            <span>{member.displayName}</span>
+            <strong>
+              {turns} {turns === 1 ? "turn" : "turns"}
+            </strong>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -703,6 +824,7 @@ function ChangeDialog({
   dialog,
   assignments,
   members,
+  localToday,
   fetcher,
   issue,
   onChange,
@@ -713,6 +835,7 @@ function ChangeDialog({
   dialog: DialogState;
   assignments: ProjectedAssignment[];
   members: ProjectedMember[];
+  localToday: string;
   fetcher: ActionFetcher;
   issue?: HomeActionData;
   onChange(next: DialogState): void;
@@ -771,6 +894,23 @@ function ChangeDialog({
     dialog.kind === "reassign"
       ? members.find(({ id }) => id === dialog.recipientId)
       : undefined;
+  const balanceAssignment =
+    dialog.kind === "reassign"
+      ? currentValue(
+          assignments.find(
+            ({ assignmentId }) => assignmentId === dialog.balanceAssignmentId,
+          ),
+        )
+      : undefined;
+  const eligibleBalanceAssignments =
+    dialog.kind === "reassign" && recipient
+      ? chronological(assignments).filter(
+          (candidate) =>
+            candidate.assignmentId !== dialog.assignmentId &&
+            candidate.member.id === recipient.id &&
+            candidate.period.localStartDate > localToday,
+        )
+      : [];
   const validSwap = Boolean(
     first &&
     second &&
@@ -780,9 +920,19 @@ function ChangeDialog({
   const validRecipient = Boolean(
     recipient && assignment && recipient.id !== assignment.member.id,
   );
-  const selectedAssignments = [assignment, first, second].filter(
-    (item): item is ProjectedAssignment => Boolean(item),
+  const validBalancedSwap = Boolean(
+    validRecipient &&
+    balanceAssignment &&
+    recipient &&
+    balanceAssignment.member.id === recipient.id &&
+    balanceAssignment.member.id !== assignment?.member.id,
   );
+  const selectedAssignments = [
+    assignment,
+    balanceAssignment,
+    first,
+    second,
+  ].filter((item): item is ProjectedAssignment => Boolean(item));
   const reviewedConflict = Boolean(
     conflictKey && dialog.reviewedConflictKey === conflictKey,
   );
@@ -808,7 +958,9 @@ function ChangeDialog({
             <p className="eyebrow">Confirm change</p>
             <h2 id="dialog-title">
               {dialog.kind === "reassign"
-                ? `Reassign ${assignment?.chore.name ?? "chore"}`
+                ? dialog.step === "recipient"
+                  ? `Reassign ${assignment?.chore.name ?? "chore"}`
+                  : `Review ${assignment?.chore.name ?? "chore"} change`
                 : "Swap two turns"}
             </h2>
             {dialog.kind === "reassign" ? (
@@ -825,98 +977,190 @@ function ChangeDialog({
             ×
           </button>
         </header>
-        <input type="hidden" name="intent" value={dialog.kind} />
         <input type="hidden" name="requestId" value={dialog.requestId} />
         {dialog.kind === "reassign" && assignment ? (
           <>
-            <input
-              type="hidden"
-              name="assignmentId"
-              value={assignment.assignmentId}
-            />
-            <input
-              type="hidden"
-              name="expectedVersion"
-              value={assignment.version}
-            />
-            <fieldset className="member-picker" disabled={pending}>
-              <legend>Who will take it?</legend>
-              {members.map((member) => {
-                const current = member.id === assignment.member.id;
-                return (
-                  <label
-                    key={member.id}
-                    className={
-                      dialog.recipientId === member.id ? "is-selected" : ""
-                    }
-                  >
-                    <input
-                      type="radio"
-                      name="recipientMemberId"
-                      value={member.id}
-                      disabled={current}
-                      checked={dialog.recipientId === member.id}
-                      onChange={() =>
-                        onChange({ ...dialog, recipientId: member.id })
+            {dialog.step === "recipient" ? (
+              <fieldset className="member-picker" disabled={pending}>
+                <legend>Choose a household member</legend>
+                {members.map((member) => {
+                  const current = member.id === assignment.member.id;
+                  return (
+                    <label
+                      key={member.id}
+                      className={
+                        dialog.recipientId === member.id ? "is-selected" : ""
                       }
+                    >
+                      <input
+                        type="radio"
+                        name="recipient-choice"
+                        value={member.id}
+                        disabled={current}
+                        checked={dialog.recipientId === member.id}
+                        onChange={() =>
+                          onChange({
+                            ...dialog,
+                            recipientId: member.id,
+                            balanceAssignmentId: "",
+                          })
+                        }
+                      />
+                      <Person member={member} size="small" />
+                      <span>
+                        <strong>{member.displayName}</strong>
+                        <small>
+                          {current ? "On it now" : "Active household member"}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
+            ) : recipient && validRecipient ? (
+              <>
+                {balanceAssignment ? (
+                  <>
+                    <input type="hidden" name="intent" value="swap" />
+                    <input
+                      type="hidden"
+                      name="firstAssignmentId"
+                      value={assignment.assignmentId}
                     />
-                    <Person member={member} size="small" />
-                    <span>
-                      <strong>{member.displayName}</strong>
-                      <small>
-                        {current ? "On it now" : "Active household member"}
-                      </small>
-                    </span>
-                  </label>
-                );
-              })}
-            </fieldset>
-            {recipient && validRecipient ? (
-              <ReassignReview assignment={assignment} recipient={recipient} />
+                    <input
+                      type="hidden"
+                      name="firstExpectedVersion"
+                      value={assignment.version}
+                    />
+                    <input
+                      type="hidden"
+                      name="secondAssignmentId"
+                      value={balanceAssignment.assignmentId}
+                    />
+                    <input
+                      type="hidden"
+                      name="secondExpectedVersion"
+                      value={balanceAssignment.version}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <input type="hidden" name="intent" value="reassign" />
+                    <input
+                      type="hidden"
+                      name="assignmentId"
+                      value={assignment.assignmentId}
+                    />
+                    <input
+                      type="hidden"
+                      name="recipientMemberId"
+                      value={recipient.id}
+                    />
+                    <input
+                      type="hidden"
+                      name="expectedVersion"
+                      value={assignment.version}
+                    />
+                  </>
+                )}
+                <ReassignReview assignment={assignment} recipient={recipient} />
+                <section
+                  className="balance-choice"
+                  aria-labelledby="balance-title"
+                >
+                  <h3 id="balance-title">
+                    Keep it one-time or balance the turn
+                  </h3>
+                  <p>
+                    Confirm the one-time change and {recipient.displayName}{" "}
+                    receives an extra turn, or choose one of their future turns
+                    to give to {assignment.member.displayName}.
+                  </p>
+                  <CustomDropdown
+                    id="balance-assignment"
+                    label="Balance with a future turn"
+                    value={dialog.balanceAssignmentId}
+                    disabled={pending}
+                    options={[
+                      { value: "", label: "Keep as a one-time change" },
+                      ...eligibleBalanceAssignments.map((candidate) => ({
+                        value: candidate.assignmentId,
+                        label: `${candidate.chore.name} — ${formatPeriod(candidate.period)}`,
+                      })),
+                    ]}
+                    onChange={(balanceAssignmentId) =>
+                      onChange({ ...dialog, balanceAssignmentId })
+                    }
+                  />
+                  {eligibleBalanceAssignments.length === 0 ? (
+                    <p className="balance-empty">
+                      No eligible future turns are available to balance this
+                      change.
+                    </p>
+                  ) : null}
+                </section>
+              </>
             ) : null}
           </>
         ) : null}
         {dialog.kind === "swap" ? (
-          <div className="swap-picker">
-            <AssignmentSelect
-              id="first-assignment"
-              label="First turn"
-              value={dialog.firstId}
-              assignments={assignments}
-              disabled={pending}
-              onChange={(firstId) => onChange({ ...dialog, firstId })}
-            />
-            <span className="swap-glyph" aria-hidden="true">
-              <Icon name="swap" />
-            </span>
-            <AssignmentSelect
-              id="second-assignment"
-              label="Second turn"
-              value={dialog.secondId}
-              assignments={assignments}
-              disabled={pending}
-              onChange={(secondId) => onChange({ ...dialog, secondId })}
-            />
-            {first ? (
-              <input
-                type="hidden"
-                name="firstExpectedVersion"
-                value={first.version}
+          <>
+            <input type="hidden" name="intent" value="swap" />
+            <div className="swap-picker">
+              <AssignmentSelect
+                id="first-assignment"
+                label="First turn"
+                value={dialog.firstId}
+                assignments={assignments}
+                disabled={pending}
+                onChange={(firstId) => onChange({ ...dialog, firstId })}
               />
-            ) : null}
-            {second ? (
-              <input
-                type="hidden"
-                name="secondExpectedVersion"
-                value={second.version}
+              <span className="swap-glyph" aria-hidden="true">
+                <Icon name="swap" />
+              </span>
+              <AssignmentSelect
+                id="second-assignment"
+                label="Second turn"
+                value={dialog.secondId}
+                assignments={assignments}
+                disabled={pending}
+                onChange={(secondId) => onChange({ ...dialog, secondId })}
               />
-            ) : null}
-            {dialog.firstId && dialog.secondId && !validSwap ? (
-              <p className="field-error">
-                Choose two turns held by different people.
-              </p>
-            ) : null}
-          </div>
+              {first ? (
+                <>
+                  <input
+                    type="hidden"
+                    name="firstAssignmentId"
+                    value={first.assignmentId}
+                  />
+                  <input
+                    type="hidden"
+                    name="firstExpectedVersion"
+                    value={first.version}
+                  />
+                </>
+              ) : null}
+              {second ? (
+                <>
+                  <input
+                    type="hidden"
+                    name="secondAssignmentId"
+                    value={second.assignmentId}
+                  />
+                  <input
+                    type="hidden"
+                    name="secondExpectedVersion"
+                    value={second.version}
+                  />
+                </>
+              ) : null}
+              {dialog.firstId && dialog.secondId && !validSwap ? (
+                <p className="field-error">
+                  Choose two turns held by different people.
+                </p>
+              ) : null}
+            </div>
+          </>
         ) : null}
         {dialog.kind === "swap" && first && second && validSwap ? (
           <SwapReview first={first} second={second} />
@@ -939,24 +1183,53 @@ function ChangeDialog({
           <button
             className="button quiet"
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (dialog.kind === "reassign" && dialog.step === "review") {
+                onChange({
+                  ...dialog,
+                  step: "recipient",
+                  balanceAssignmentId: "",
+                });
+              } else {
+                onClose();
+              }
+            }}
             disabled={pending}
           >
-            Cancel
+            {dialog.kind === "reassign" && dialog.step === "review"
+              ? "Back"
+              : "Cancel"}
           </button>
           <button
+            key={dialog.kind === "reassign" ? dialog.step : "swap-confirmation"}
             className="button primary"
-            type="submit"
+            type={
+              dialog.kind === "reassign" && dialog.step === "recipient"
+                ? "button"
+                : "submit"
+            }
+            onClick={() => {
+              if (dialog.kind === "reassign" && dialog.step === "recipient") {
+                onChange({ ...dialog, step: "review" });
+              }
+            }}
             disabled={
               pending ||
               Boolean(conflict && !reviewedConflict) ||
-              (dialog.kind === "reassign" ? !validRecipient : !validSwap)
+              (dialog.kind === "reassign"
+                ? !validRecipient ||
+                  (dialog.step === "review" &&
+                    Boolean(dialog.balanceAssignmentId) &&
+                    !validBalancedSwap)
+                : !validSwap)
             }
           >
             {pending
               ? "Saving…"
               : dialog.kind === "reassign"
-                ? "Confirm handoff"
+                ? dialog.step === "recipient"
+                  ? "Continue"
+                  : "Confirm change"
                 : "Confirm"}
           </button>
         </footer>
@@ -979,26 +1252,21 @@ function AssignmentSelect({
   disabled: boolean;
   onChange(value: string): void;
 }) {
-  const prefix = id.startsWith("first") ? "first" : "second";
   return (
-    <label htmlFor={id}>
-      {label}
-      <select
-        id={id}
-        name={`${prefix}AssignmentId`}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Choose an assignment</option>
-        {assignments.map((item) => (
-          <option key={item.assignmentId} value={item.assignmentId}>
-            {item.chore.name} — {formatPeriod(item.period)} —{" "}
-            {item.member.displayName}
-          </option>
-        ))}
-      </select>
-    </label>
+    <CustomDropdown
+      id={id}
+      label={label}
+      value={value}
+      disabled={disabled}
+      options={[
+        { value: "", label: "Choose an assignment" },
+        ...assignments.map((item) => ({
+          value: item.assignmentId,
+          label: `${item.chore.name} — ${formatPeriod(item.period)} — ${item.member.displayName}`,
+        })),
+      ]}
+      onChange={onChange}
+    />
   );
 }
 function ReassignReview({
@@ -1011,7 +1279,7 @@ function ReassignReview({
   return (
     <section className="change-review" aria-labelledby="review-title">
       <p className="eyebrow">Before → after</p>
-      <h3 id="review-title">Review this handoff</h3>
+      <h3 id="review-title">Review this change</h3>
       <div className="review-route">
         <span>
           <Person member={assignment.member} />

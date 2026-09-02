@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const views = [
   ["now", "On duty"],
@@ -208,6 +208,146 @@ test("profile control uses an available Google image and hides account actions",
   await expect(popover).toBeVisible();
 });
 
+test("custom dropdown supports keyboard, mouse, tab, escape, and outside dismissal", async ({
+  page,
+}) => {
+  await page.goto("/?view=household");
+  await expect(page.locator("select")).toHaveCount(0);
+  const trigger = page.locator("#member-filter-button");
+  await expect(trigger).toHaveAccessibleName("Member: Everyone");
+
+  await trigger.focus();
+  await trigger.press("ArrowDown");
+  const listbox = page.getByRole("listbox", { name: "Member options" });
+  await expect(listbox).toBeVisible();
+  await expect(listbox).toBeFocused();
+  await listbox.press("End");
+  const activeId = await listbox.getAttribute("aria-activedescendant");
+  expect(activeId).toBeTruthy();
+  await expect(page.locator(`#${activeId}`)).toHaveText("Member D");
+  await listbox.press("Enter");
+  await expect(trigger).toHaveAccessibleName("Member: Member D");
+
+  await trigger.press("Enter");
+  await expect(listbox).toBeVisible();
+  await listbox.press("Escape");
+  await expect(listbox).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.press("Space");
+  await listbox.press("Tab");
+  await expect(listbox).toBeHidden();
+
+  await trigger.click();
+  const member-b = listbox.getByRole("option", { name: "Member B" });
+  await member-b.click();
+  await expect(trigger).toHaveAccessibleName("Member: Member B");
+  await trigger.click();
+  const selected = listbox.getByRole("option", { name: "Member B" });
+  await expect(selected).toHaveAttribute("aria-selected", "true");
+  await expect(selected).toHaveCSS("border-top-width", "0px");
+  expect(
+    await selected.evaluate((node) => getComputedStyle(node).boxShadow),
+  ).toBe("none");
+  await page.getByRole("heading", { name: "Household schedule" }).click();
+  await expect(listbox).toBeHidden();
+});
+
+test("Household owns swap and every rendered on-duty cell opens its assignment", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  await expect(
+    page.getByRole("button", { name: "Swap two turns" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /Reassign this turn/ }),
+  ).toHaveCount(2);
+
+  await page.getByRole("link", { name: "Household" }).click();
+  await expect(
+    page.getByRole("button", { name: "Swap two turns" }),
+  ).toBeVisible();
+  const cell = page
+    .locator(
+      page.viewportSize()!.width <= 760 ? ".schedule-list" : ".schedule-table",
+    )
+    .getByRole("button", { name: /Reassign Trash, Fri, Sep 18/ });
+  await cell.click();
+  await expect(
+    page.getByRole("dialog", { name: "Reassign Trash" }),
+  ).toContainText("Fri, Sep 18 – Thu, Sep 24");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+
+  if (page.viewportSize()!.width > 760) {
+    const widths = await page
+      .locator(".schedule-table tbody tr")
+      .first()
+      .locator(":scope > th, :scope > td")
+      .evaluateAll((cells) =>
+        cells.map((cell) => cell.getBoundingClientRect().width),
+      );
+    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(3);
+  }
+});
+
+test("two-step reassign submits exact one-time and optional balanced-swap payloads", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const open = page.getByRole("button", { name: /Reassign this turn/ }).first();
+  await open.click();
+  const dialog = page.locator(".change-dialog");
+  await expect(dialog).not.toContainText("Who will take it?");
+  await page.getByRole("radio", { name: /Member D/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Review Trash change" }),
+  ).toContainText("extra turn");
+  await expect(
+    page.getByRole("button", { name: /Balance with a future turn:/ }),
+  ).toContainText("Keep as a one-time change");
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.locator(".change-dialog")).toHaveAccessibleName(
+    "Reassign Trash",
+  );
+  await expect(page.getByRole("radio", { name: /Member D/ })).toBeChecked();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  expect(await formPayload(page.locator(".change-dialog"))).toEqual({
+    assignmentId: "2026-08-28-trash",
+    expectedVersion: "1",
+    intent: "reassign",
+    recipientMemberId: "member-d",
+    requestId: expect.stringMatching(/^request:/),
+  });
+  await page.getByRole("button", { name: "Confirm change" }).click();
+  await expect(page.getByRole("status")).toContainText("handoff was saved");
+
+  await open.click();
+  await page.getByRole("radio", { name: /Member B/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  const balance = page.getByRole("button", {
+    name: /Balance with a future turn:/,
+  });
+  await balance.click();
+  const candidates = page.getByRole("listbox", {
+    name: "Balance with a future turn options",
+  });
+  await expect(candidates.getByRole("option")).toHaveCount(3);
+  await expect(candidates).not.toContainText("Aug 28");
+  await candidates.getByRole("option", { name: /Trash — Fri, Sep 4/ }).click();
+  expect(await formPayload(page.getByRole("dialog"))).toEqual({
+    firstAssignmentId: "2026-08-28-trash",
+    firstExpectedVersion: "1",
+    intent: "swap",
+    requestId: expect.stringMatching(/^request:/),
+    secondAssignmentId: "2026-09-04-trash",
+    secondExpectedVersion: "1",
+  });
+  await page.getByRole("button", { name: "Confirm change" }).click();
+});
+
 test("dialog fits, exposes review semantics, and restores keyboard focus", async ({
   page,
 }) => {
@@ -227,19 +367,23 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
     )
     .toBe(true);
   await page.getByRole("radio", { name: /Member B/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(
-    page.getByRole("heading", { name: "Review this handoff" }),
+    page.getByRole("heading", { name: "Review this change" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Confirm handoff" }),
+    page.getByRole("button", { name: "Confirm change" }),
   ).toBeEnabled();
-  await expect(dialog).toContainText("Current");
-  await expect(dialog).toContainText("Member A");
-  await expect(dialog).toContainText("New");
-  await expect(dialog).toContainText("Member B");
-  await expect(dialog).toContainText("Ownership range");
+  const reviewDialog = page.getByRole("dialog", {
+    name: "Review Trash change",
+  });
+  await expect(reviewDialog).toContainText("Current");
+  await expect(reviewDialog).toContainText("Member A");
+  await expect(reviewDialog).toContainText("New");
+  await expect(reviewDialog).toContainText("Member B");
+  await expect(reviewDialog).toContainText("Ownership range");
 
-  const box = await dialog.boundingBox();
+  const box = await reviewDialog.boundingBox();
   const viewport = page.viewportSize();
   expect(box).not.toBeNull();
   expect(viewport).not.toBeNull();
@@ -249,14 +393,14 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
 
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(reviewDialog).toBeHidden();
   await expect(opener).toBeFocused();
 });
 
 test("dialog closes only from its backdrop and protects pending changes", async ({
   page,
 }) => {
-  await page.goto("/?view=now&pending=1");
+  await page.goto("/?view=household&pending=1");
   const opener = page.getByRole("button", { name: "Swap two turns" });
   await opener.click();
   const dialog = page.getByRole("dialog", { name: "Swap two turns" });
@@ -271,8 +415,8 @@ test("dialog closes only from its backdrop and protects pending changes", async 
   await expect(opener).toBeFocused();
 
   await opener.click();
-  await page.getByLabel("First turn").selectOption("2026-08-28-trash");
-  await page.getByLabel("Second turn").selectOption("2026-08-31-dishwasher");
+  await chooseDropdown(page, "First turn", "2026-08-28-trash");
+  await chooseDropdown(page, "Second turn", "2026-08-31-dishwasher");
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Saving…" })).toBeDisabled();
   const pendingBox = await dialog.boundingBox();
@@ -377,10 +521,23 @@ test("household range is URL-backed and All time includes server-provided past d
   await expect(page.locator("main")).not.toContainText("Fri, Aug 14");
 
   await page.getByRole("link", { name: "All time" }).click();
+  await expect(page.getByRole("link", { name: "All time" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(
+    page.getByRole("navigation", { name: "Schedule range" }),
+  ).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("main")).not.toContainText("Fri, Aug 14");
   await expect(page).toHaveURL(/view=household&range=all/);
   await expect(page.locator("main")).toContainText("Fri, Aug 14 – Thu, Aug 20");
+  await expect(
+    page.getByRole("navigation", { name: "Schedule range" }),
+  ).toHaveAttribute("aria-busy", "false");
+  await expect(page.getByText("Turns in All time")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/range=upcoming/);
+  await expect(page.getByText(/Turns in/)).toHaveCount(0);
 });
 
 test("safe reminder states are useful without exposing contact or provider data", async ({
@@ -410,16 +567,9 @@ test("the chronological household schedule reflows at 320px", async ({
     viewportWidth: document.documentElement.clientWidth,
   }));
   expect(fit.documentWidth).toBeLessThanOrEqual(fit.viewportWidth);
-  for (const select of await page.getByRole("combobox").all()) {
-    expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    expect(
-      await select.evaluate((element) => getComputedStyle(element).appearance),
-    ).toBe("none");
-    expect(
-      await select.evaluate(
-        (element) => getComputedStyle(element).backgroundPositionX,
-      ),
-    ).toContain("calc(100% - 12px)");
+  await expect(page.locator("select")).toHaveCount(0);
+  for (const dropdown of await page.locator(".custom-dropdown-trigger").all()) {
+    expect((await dropdown.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
 });
 
@@ -442,18 +592,18 @@ test("history hides internal IDs and fits at 320px", async ({ page }) => {
 test("atomic swap dialog reviews both legs and keeps its action fitted", async ({
   page,
 }) => {
-  await page.goto("/?view=now");
+  await page.goto("/?view=household");
   await page.getByRole("button", { name: "Swap two turns" }).click();
   const dialog = page.getByRole("dialog", { name: "Swap two turns" });
   await expect(dialog).toBeVisible();
-  await page.getByLabel("First turn").selectOption("2026-08-28-trash");
-  await page.getByLabel("Second turn").selectOption("2026-08-31-dishwasher");
+  await chooseDropdown(page, "First turn", "2026-08-28-trash");
+  await chooseDropdown(page, "Second turn", "2026-08-31-dishwasher");
+  await expect(page.getByRole("button", { name: /First turn:/ })).toContainText(
+    "Trash — Fri, Aug 28 – Thu, Sep 3 — Member A",
+  );
   await expect(
-    page.getByLabel("First turn").locator("option:checked"),
-  ).toHaveText("Trash — Fri, Aug 28 – Thu, Sep 3 — Member A");
-  await expect(
-    page.getByLabel("Second turn").locator("option:checked"),
-  ).toHaveText("Dishwasher — Mon, Aug 31 – Sun, Sep 6 — Member C");
+    page.getByRole("button", { name: /Second turn:/ }),
+  ).toContainText("Dishwasher — Mon, Aug 31 – Sun, Sep 6 — Member C");
   await expect(
     page.getByRole("heading", { name: "Review both swap legs" }),
   ).toBeVisible();
@@ -466,6 +616,14 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   await expect(dialog).not.toContainText("confirm as one operation");
   await expect(dialog).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(dialog).toContainText("Mon, Aug 31 – Sun, Sep 6");
+  expect(await formPayload(dialog)).toEqual({
+    firstAssignmentId: "2026-08-28-trash",
+    firstExpectedVersion: "1",
+    intent: "swap",
+    requestId: expect.stringMatching(/^request:/),
+    secondAssignmentId: "2026-08-31-dishwasher",
+    secondExpectedVersion: "1",
+  });
   const confirm = page.getByRole("button", { name: "Confirm", exact: true });
   await expect(confirm).toBeEnabled();
   const fit = await confirm.evaluate((button) => ({
@@ -492,9 +650,10 @@ test("stale recovery names refreshed ownership values and requires intentional r
     .getByRole("button", { name: /Reassign this turn/ })
     .first()
     .click();
-  const dialog = page.getByRole("dialog", { name: "Reassign Trash" });
+  const dialog = page.locator(".change-dialog");
   await page.getByRole("radio", { name: /Member B/ }).check();
-  await page.getByRole("button", { name: "Confirm handoff" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Confirm change" }).click();
 
   const issue = dialog.getByRole("alert");
   await expect(issue).toBeFocused();
@@ -502,7 +661,7 @@ test("stale recovery names refreshed ownership values and requires intentional r
   await expect(issue).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(issue).toContainText("Current owner: Member C");
   await expect(
-    page.getByRole("button", { name: "Confirm handoff" }),
+    page.getByRole("button", { name: "Confirm change" }),
   ).toBeDisabled();
 
   await page.getByRole("button", { name: "Review current values" }).click();
@@ -516,7 +675,7 @@ test("stale recovery names refreshed ownership values and requires intentional r
   await expect(dialog).toContainText("New");
   await expect(dialog).toContainText("Member B");
   await expect(
-    page.getByRole("button", { name: "Confirm handoff" }),
+    page.getByRole("button", { name: "Confirm change" }),
   ).toBeEnabled();
 });
 
@@ -540,11 +699,11 @@ for (const ended of [
       .getByRole("article")
       .filter({ hasText: ended.chore });
     await choreCard.getByRole("button", { name: "Reassign this turn" }).click();
-    const dialog = page.getByRole("dialog", {
-      name: `Reassign ${ended.chore}`,
-    });
+    const dialog = page.locator(".change-dialog");
+    await expect(dialog).toHaveAccessibleName(`Reassign ${ended.chore}`);
     await page.getByRole("radio", { name: /Member A/ }).check();
-    await page.getByRole("button", { name: "Confirm handoff" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Confirm change" }).click();
 
     const issue = dialog.getByRole("alert");
     await expect(issue).toContainText("ownership period has ended");
@@ -566,6 +725,7 @@ test("skip navigation, visible focus, fitted controls, and reduced motion work",
   await skip.press("Enter");
   await expect(page.locator("#main-content")).toBeFocused();
 
+  await page.getByRole("link", { name: "Household" }).click();
   const fitted = page.getByRole("button", { name: "Swap two turns" });
   const fit = await fitted.evaluate((button) => ({
     clientWidth: button.clientWidth,
@@ -621,3 +781,44 @@ test("light mode uses the flat neutral canvas", async ({ page }) => {
       .evaluate((element) => getComputedStyle(element).backgroundImage),
   ).toBe("none");
 });
+
+test("landing and header use the same brand-mark geometry", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const headerMark = await markGeometry(page);
+  await page.goto("/?auth=unauthorized");
+  expect(await markGeometry(page)).toEqual(headerMark);
+});
+
+async function chooseDropdown(page: Page, label: string, value: string) {
+  await page.getByRole("button", { name: new RegExp(`^${label}:`) }).click();
+  await page.locator(`[role="option"][data-value="${value}"]`).click();
+}
+
+function formPayload(container: Locator) {
+  return container
+    .locator("form")
+    .evaluate((form) =>
+      Object.fromEntries(
+        [...new FormData(form as HTMLFormElement).entries()].map(
+          ([key, value]) => [key, String(value)],
+        ),
+      ),
+    );
+}
+
+async function markGeometry(page: Page) {
+  return page
+    .locator(".brand-mark")
+    .first()
+    .evaluate((mark) => {
+      const style = getComputedStyle(mark);
+      const box = mark.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        radius: style.borderRadius,
+      };
+    });
+}

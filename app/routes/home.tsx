@@ -11,7 +11,10 @@ import {
   getPersonalAgenda,
   type ReadModelContext,
 } from "../domain/read-models";
-import { prepareCurrentSchedule } from "../domain/rotation/prepare";
+import {
+  MATERIALIZATION_HORIZON_PERIODS,
+  prepareCurrentSchedule,
+} from "../domain/rotation/prepare";
 import type { D1DatabaseLike } from "../domain/storage/d1";
 import {
   ChoreRelayShell,
@@ -58,6 +61,9 @@ const services: HomeServices = {
   now: () => new Date(),
 };
 
+const READ_PAGE_SIZE = 100;
+const HOUSEHOLD_ASSIGNMENT_CAP = 200;
+
 function authorizedReads(
   database: D1DatabaseLike,
   member: AuthorizedMember,
@@ -85,34 +91,62 @@ export async function loadHomeData(
     const member = await dependencies.authorize(request, database, config);
     const now = dependencies.now();
     const context = authorizedReads(database, member);
-    const [current, mine, householdList, household, history, activeMembers] =
-      await Promise.all([
-        getCurrentAndNext(context, { request, now }),
-        getPersonalAgenda(context, { request, now, limit: 100 }),
-        getHouseholdList(context, {
-          request,
-          now,
-          limit: 100,
-          ...(householdRange === "all"
-            ? { fromDate: "0001-01-01", toDate: "9999-12-31" }
-            : {}),
-        }),
-        getHouseholdCalendar(context, { request, now }),
-        getGroupedHistory(context, { request, limit: 25 }),
-        getActiveMembers(context, { request }),
-      ]);
-    return {
-      state: "ready",
-      view,
-      signedInMember: member,
-      householdRange,
-      localToday: localDateAt(now, config.household.timeZone),
+    const localToday = localDateAt(now, config.household.timeZone);
+    const upcomingWindow = householdUpcomingWindow(localToday);
+    const candidateWindow = {
+      fromDate: upcomingWindow.fromDate,
+      toDate: addLocalDays(localToday, MATERIALIZATION_HORIZON_PERIODS * 7),
+    };
+    const [
       current,
       mine,
       householdList,
       household,
       history,
       activeMembers,
+      assignmentCandidates,
+    ] = await Promise.all([
+      getCurrentAndNext(context, { request, now }),
+      getPersonalAgenda(context, { request, now, limit: 100 }),
+      householdRange === "all"
+        ? getBoundedHouseholdList(context, {
+            request,
+            now,
+            fromDate: "0001-01-01",
+            toDate: "9999-12-31",
+          })
+        : getHouseholdList(context, {
+            request,
+            now,
+            limit: READ_PAGE_SIZE,
+            ...upcomingWindow,
+          }),
+      getHouseholdCalendar(context, {
+        request,
+        now,
+        ...upcomingWindow,
+      }),
+      getGroupedHistory(context, { request, limit: 25 }),
+      getActiveMembers(context, { request }),
+      getBoundedHouseholdList(context, {
+        request,
+        now,
+        ...candidateWindow,
+      }),
+    ]);
+    return {
+      state: "ready",
+      view,
+      signedInMember: member,
+      householdRange,
+      localToday,
+      current,
+      mine,
+      householdList,
+      household,
+      history,
+      activeMembers,
+      assignmentCandidates: assignmentCandidates.items,
     };
   } catch (error) {
     if (
@@ -123,6 +157,52 @@ export async function loadHomeData(
     }
     return { state: "unavailable", view };
   }
+}
+
+type HouseholdListResult = Awaited<ReturnType<typeof getHouseholdList>>;
+
+async function getBoundedHouseholdList(
+  context: ReadModelContext,
+  input: Omit<Parameters<typeof getHouseholdList>[1], "limit" | "offset">,
+): Promise<HouseholdListResult> {
+  const items: HouseholdListResult["items"] = [];
+  let offset = 0;
+  let nextOffset: number | null = 0;
+  while (nextOffset !== null && items.length < HOUSEHOLD_ASSIGNMENT_CAP) {
+    const page = await getHouseholdList(context, {
+      ...input,
+      limit: Math.min(READ_PAGE_SIZE, HOUSEHOLD_ASSIGNMENT_CAP - items.length),
+      offset,
+    });
+    items.push(...page.items);
+    nextOffset = page.page.nextOffset;
+    offset = nextOffset ?? offset;
+  }
+  return {
+    state: items.length === 0 ? "empty" : "ready",
+    items,
+    page: {
+      limit: HOUSEHOLD_ASSIGNMENT_CAP,
+      offset: 0,
+      nextOffset,
+    },
+  };
+}
+
+function addLocalDays(localDate: string, days: number): string {
+  const value = new Date(`${localDate}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+export function householdUpcomingWindow(localToday: string): {
+  fromDate: string;
+  toDate: string;
+} {
+  return {
+    fromDate: addLocalDays(localToday, -6),
+    toDate: addLocalDays(localToday, 30),
+  };
 }
 
 function localDateAt(value: Date, timeZone: string): string {
@@ -261,7 +341,10 @@ export async function runHomeAction(
     }
     if (intent === "materialize") {
       if (!exactKeys(form, ["intent", "requestId"])) return validation();
-      await dependencies.prepare(database, actor, { now, horizonPeriods: 4 });
+      await dependencies.prepare(database, actor, {
+        now,
+        horizonPeriods: MATERIALIZATION_HORIZON_PERIODS,
+      });
       return { state: "success", intent };
     }
     const commandService = createAssignmentCommandService(database);

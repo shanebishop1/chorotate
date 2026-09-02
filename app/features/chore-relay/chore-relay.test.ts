@@ -192,6 +192,7 @@ const data: ChoreRelayData = {
     ],
   },
   activeMembers: members,
+  assignmentCandidates: assignments,
 };
 
 function render(
@@ -233,6 +234,7 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).not.toContain("Mock workspace");
     expect(html).not.toContain("The handoff starts here");
     expect(html).not.toContain("Every turn keeps its own dates");
+    expect(html).not.toContain("Swap two turns");
   });
 
   it("renders each chore's own current and next period at the handoff", () => {
@@ -263,6 +265,9 @@ describe("Chore Relay integrated rendering", () => {
     expect(household).toContain("Chore");
     expect(household).toContain("Current turn");
     expect(household).toContain("Period");
+    expect(household).toContain("Swap two turns");
+    expect(household).toContain("Reassign Trash");
+    expect(household).not.toContain("<select");
     expect(household).not.toContain("Turn 1");
     expect(household.indexOf("Fri, Aug 28 – Thu, Sep 3")).toBeLessThan(
       household.indexOf("Mon, Aug 31 – Sun, Sep 6"),

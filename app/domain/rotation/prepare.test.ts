@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { AuthorizedMember } from "../../auth/access";
 import type { D1DatabaseLike, D1StatementLike } from "../storage/d1";
-import { prepareCurrentSchedule } from "./prepare";
+import {
+  MATERIALIZATION_HORIZON_PERIODS,
+  prepareCurrentSchedule,
+} from "./prepare";
 
 class PreparationD1 implements D1DatabaseLike {
   readonly inserted: unknown[][] = [];
@@ -64,6 +67,21 @@ class PreparationD1 implements D1DatabaseLike {
 }
 
 describe("current schedule materialization preparation", () => {
+  it("guarantees 53 weekly periods per chore by default", async () => {
+    const database = new PreparationD1();
+    const actor = {
+      id: "Member A",
+      householdId: "home",
+    } as AuthorizedMember;
+
+    await prepareCurrentSchedule(database, actor, {
+      now: new Date("2026-09-01T16:00:00.000Z"),
+    });
+
+    expect(MATERIALIZATION_HORIZON_PERIODS).toBe(53);
+    expect(database.inserted).toHaveLength(106);
+  });
+
   it("consumes each chore's persisted anchor and ownership weekday", async () => {
     const database = new PreparationD1();
     const actor = {

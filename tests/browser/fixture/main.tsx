@@ -227,6 +227,7 @@ const data: ChoreRelayData = {
     ],
   },
   activeMembers: members,
+  assignmentCandidates: assignments,
 };
 
 function Fixture() {
@@ -285,6 +286,12 @@ const router = createBrowserRouter([
   {
     path: "/",
     Component: Fixture,
+    loader: async ({ request }) => {
+      if (new URL(request.url).searchParams.get("range") === "all") {
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+      return null;
+    },
     action: async ({ request }) => {
       if (new URL(request.url).searchParams.get("pending") === "1") {
         await new Promise((resolve) => setTimeout(resolve, 1_500));

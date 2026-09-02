@@ -8,9 +8,17 @@ import { describe, expect, it } from "vitest";
 
 import { AuthorizationError, type AuthorizedMember } from "../auth/access";
 import type { D1DatabaseLike, D1StatementLike } from "../domain/storage/d1";
-import { prepareCurrentSchedule } from "../domain/rotation/prepare";
+import {
+  MATERIALIZATION_HORIZON_PERIODS,
+  prepareCurrentSchedule,
+} from "../domain/rotation/prepare";
 import type { RuntimeConfig } from "../runtime/environment";
-import { loadHomeData, runHomeAction, shouldRevalidate } from "./home";
+import {
+  householdUpcomingWindow,
+  loadHomeData,
+  runHomeAction,
+  shouldRevalidate,
+} from "./home";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const actor: AuthorizedMember = {
@@ -45,6 +53,13 @@ const config = {
 } satisfies RuntimeConfig;
 
 describe("home view navigation", () => {
+  it("uses explicit local boundaries for the current overlap and next month", () => {
+    expect(householdUpcomingWindow("2026-08-31")).toEqual({
+      fromDate: "2026-08-25",
+      toDate: "2026-09-30",
+    });
+  });
+
   it("does not reload private schedule data for a view-only query change", () => {
     expect(
       shouldRevalidate({
@@ -195,7 +210,8 @@ describe("authenticated home route integration", () => {
       fixture.sqlite
         .prepare("SELECT count(*) AS count FROM weekly_assignments")
         .get(),
-    ).toEqual({ count: 8 });
+    ).toEqual({ count: 106 });
+    expect(MATERIALIZATION_HORIZON_PERIODS).toBe(53);
   });
 
   it("materializes from configuration membership snapshots after deactivation", async () => {
@@ -254,6 +270,7 @@ describe("authenticated home route integration", () => {
 
   it("excludes past assignments from Upcoming and includes them in bounded All time data", async () => {
     const fixture = database();
+    await prepareCurrentSchedule(fixture.database, actor, { now });
     fixture.sqlite
       .prepare(
         `INSERT INTO weekly_assignments
@@ -300,6 +317,24 @@ describe("authenticated home route integration", () => {
         ),
     ).toBe(true);
     expect(allTime.state === "ready" && allTime.householdRange).toBe("all");
+    if (upcoming.state !== "ready" || allTime.state !== "ready") return;
+    expect(
+      upcoming.householdList.items.every(
+        ({ period }) =>
+          period.localStartDate >= "2026-08-25" &&
+          period.localStartDate <= "2026-09-30",
+      ),
+    ).toBe(true);
+    expect(
+      upcoming.household.periods.every(
+        ({ period }) =>
+          period.localStartDate >= "2026-08-25" &&
+          period.localStartDate <= "2026-09-30",
+      ),
+    ).toBe(true);
+    expect(allTime.householdList.items).toHaveLength(107);
+    expect(allTime.householdList.page.nextOffset).toBeNull();
+    expect(allTime.assignmentCandidates).toHaveLength(106);
   });
 
   it("performs a direct reassignment with server IDs and exposes it once in grouped history", async () => {

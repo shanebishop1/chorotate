@@ -4,6 +4,8 @@ import { materializeRollingHorizon } from "./materialize";
 import type { Weekday } from "./period";
 import type { ChoreRotation, RotationConfiguration } from "./rotation";
 
+export const MATERIALIZATION_HORIZON_PERIODS = 53;
+
 interface HouseholdRow {
   id: unknown;
   time_zone: unknown;
@@ -128,7 +130,7 @@ export async function prepareCurrentSchedule(
     householdId: actor.householdId,
     timeZone: text(household.time_zone),
     now,
-    horizonPeriods: input.horizonPeriods ?? 4,
+    horizonPeriods: input.horizonPeriods ?? MATERIALIZATION_HORIZON_PERIODS,
     choreRotations: [...rotationsByChore.values()],
     occurredAt: now.toISOString(),
   });

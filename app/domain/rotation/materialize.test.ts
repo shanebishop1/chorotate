@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { D1DatabaseLike, D1StatementLike } from "../storage/d1";
+import { MATERIALIZATION_HORIZON_PERIODS } from "./prepare";
 import { materializeRollingHorizon } from "./materialize";
 import type { ChoreRotation } from "./rotation";
 
@@ -131,9 +132,12 @@ describe("independent rolling chore-period materialization", () => {
 
   it("is repeated/concurrent-safe with parameterized insert-only statements", async () => {
     const database = new AssignmentD1();
-    await Promise.all([materialize(database), materialize(database)]);
-    expect(database.assignments).toHaveLength(8);
-    expect(database.preparedSql).toHaveLength(16);
+    await Promise.all([
+      materialize(database, MATERIALIZATION_HORIZON_PERIODS),
+      materialize(database, MATERIALIZATION_HORIZON_PERIODS),
+    ]);
+    expect(database.assignments).toHaveLength(106);
+    expect(database.preparedSql).toHaveLength(212);
     expect(database.preparedSql.every((sql) => sql.includes("?"))).toBe(true);
     expect(
       database.preparedSql.every((sql) =>
