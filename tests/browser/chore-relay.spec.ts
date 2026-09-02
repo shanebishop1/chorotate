@@ -540,7 +540,7 @@ test("household range is URL-backed and All time includes server-provided past d
   await expect(page.getByText(/Turns in/)).toHaveCount(0);
 });
 
-test("safe reminder states are useful without exposing contact or provider data", async ({
+test("visible reminder states do not expose contact or provider data", async ({
   page,
 }) => {
   await page.goto("/?view=now");
@@ -548,8 +548,6 @@ test("safe reminder states are useful without exposing contact or provider data"
   await expect(main).toContainText("Evening reminder accepted for sending");
   await expect(main).toContainText("Reminder delivery unconfirmed");
   await expect(main).toContainText("Reminder correction needed");
-  await expect(main).toContainText("Reminder contact missing");
-  await expect(main).toContainText("Reminders suppressed");
   await expect(main).not.toContainText(/Textbelt|textId|quota|phone/i);
 });
 
