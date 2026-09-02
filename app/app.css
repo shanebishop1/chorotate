@@ -3302,6 +3302,7 @@ html[data-theme="dark"] .theme-icon-dark {
   }
 
   .primary-nav {
+    --nav-safe-shift: min(16px, env(safe-area-inset-bottom));
     right: env(safe-area-inset-right);
     left: env(safe-area-inset-left);
     width: auto;
@@ -3312,6 +3313,11 @@ html[data-theme="dark"] .theme-icon-dark {
     min-height: 53px;
     border-radius: 8px;
     font-size: 0.66rem;
+    transform: translateY(var(--nav-safe-shift));
+  }
+
+  .primary-nav a:active {
+    transform: translateY(calc(var(--nav-safe-shift) + 1px));
   }
 
   .main-content {
