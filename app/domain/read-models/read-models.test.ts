@@ -564,7 +564,7 @@ describe("authorized schedule read models", () => {
         now: new Date("2026-08-31T12:00:00Z"),
       }),
     ).toMatchObject({
-      state: "unavailable",
+      state: "empty",
       handoffs: [{ current: null, next: null }],
     });
     expect(
@@ -573,6 +573,17 @@ describe("authorized schedule read models", () => {
     expect(
       await getGroupedHistory(context(emptyDb), { request }),
     ).toMatchObject({ state: "empty", operations: [] });
+
+    insertAssignment(emptyDb, "partial", "2026-08-28", "trash", "m1");
+    expect(
+      await getCurrentAndNext(context(emptyDb), {
+        request,
+        now: new Date("2026-08-31T12:00:00Z"),
+      }),
+    ).toMatchObject({
+      state: "unavailable",
+      handoffs: [{ current: { assignmentId: "partial" }, next: null }],
+    });
   });
 });
 
