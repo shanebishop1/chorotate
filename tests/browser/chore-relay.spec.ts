@@ -36,6 +36,27 @@ for (const [view, heading] of views) {
   });
 }
 
+test("sign out uses the Better Auth JSON request contract", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/sign-out", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "{}",
+    });
+  });
+  await page.goto("/?view=now");
+
+  const requestPromise = page.waitForRequest("**/api/auth/sign-out");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  const request = await requestPromise;
+
+  expect(request.method()).toBe("POST");
+  expect(request.headers()["content-type"]).toBe("application/json");
+  expect(request.postDataJSON()).toEqual({});
+});
+
 test("dialog fits, exposes review semantics, and restores keyboard focus", async ({
   page,
 }) => {

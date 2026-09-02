@@ -1201,12 +1201,12 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
         : "/api/auth/sign-out";
       const body = signIn
         ? { provider: "google", callbackURL: `${window.location.origin}/` }
-        : undefined;
+        : {};
       const response = await fetch(endpoint, {
         method: "POST",
         credentials: "same-origin",
-        headers: body ? { "content-type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Authentication request failed");
       if (signIn) {
