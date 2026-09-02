@@ -130,6 +130,15 @@ const endedAssignments = [
     reminder: reminder("dishwasher", 3),
   },
 ] satisfies typeof assignments;
+const pastAssignment = {
+  assignmentId: "2026-08-14-trash",
+  period: range("2026-08-14"),
+  chore: chores[0],
+  member: members[0],
+  version: 1,
+  source: "rotation",
+  reminder: reminder("trash", 0),
+} satisfies (typeof assignments)[number];
 const historyAssignments = chores.map((chore) =>
   assignments.find((item) => item.chore.id === chore.id)!,
 );
@@ -141,6 +150,8 @@ const data: ChoreRelayData = {
     displayName: "Member D",
     imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
   },
+  householdRange: "upcoming",
+  localToday: "2026-08-31",
   current: {
     state: "ready",
     handoffs: chores.map((chore) => ({
@@ -229,12 +240,23 @@ function Fixture() {
   const endedAssignment = endedAssignments.find(
     ({ chore }) => chore.id === endedChore,
   );
+  const rangeData: ChoreRelayData =
+    search.get("range") === "all"
+      ? {
+          ...data,
+          householdRange: "all",
+          householdList: {
+            ...data.householdList,
+            items: [pastAssignment, ...data.householdList.items],
+          },
+        }
+      : data;
   const fixtureData = endedAssignment
     ? {
-        ...data,
+        ...rangeData,
         current: {
-          ...data.current,
-          handoffs: data.current.handoffs.map((handoff) =>
+          ...rangeData.current,
+          handoffs: rangeData.current.handoffs.map((handoff) =>
             handoff.chore.id === endedChore
               ? {
                   ...handoff,
@@ -245,17 +267,17 @@ function Fixture() {
           ),
         },
         household: {
-          ...data.household,
+          ...rangeData.household,
           periods: [
             {
               period: endedAssignment.period,
               assignments: [endedAssignment],
             },
-            ...data.household.periods,
+            ...rangeData.household.periods,
           ],
         },
       }
-    : data;
+    : rangeData;
   return <ChoreRelayShell activeView={view} state="ready" data={fixtureData} />;
 }
 
@@ -264,6 +286,9 @@ const router = createBrowserRouter([
     path: "/",
     Component: Fixture,
     action: async ({ request }) => {
+      if (new URL(request.url).searchParams.get("pending") === "1") {
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+      }
       const form = await request.formData();
       const selectedIds = [
         form.get("assignmentId"),

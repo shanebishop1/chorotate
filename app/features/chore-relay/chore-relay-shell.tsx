@@ -15,9 +15,13 @@ import type {
 } from "../../domain/read-models";
 import type { HomeActionData } from "../../routes/home";
 import { views, type ChorePeriodRange, type ChoreRelayView } from "./model";
+import type { HouseholdRange } from "./model";
+import { MiniCalendar } from "./mini-calendar";
 
 export interface ChoreRelayData {
   signedInMember: AuthorizedMember;
+  householdRange: HouseholdRange;
+  localToday: string;
   current: Awaited<ReturnType<typeof getCurrentAndNext>>;
   mine: Awaited<ReturnType<typeof getPersonalAgenda>>;
   householdList: Awaited<ReturnType<typeof getHouseholdList>>;
@@ -360,6 +364,11 @@ function NowView({
                   </div>
                 </div>
                 <PeriodRange range={currentPeriod} label="Current period" />
+                <MiniCalendar
+                  range={currentPeriod}
+                  today={data.localToday}
+                  label={`${chore.name} current period`}
+                />
                 <ReminderStatus reminder={assignment.reminder} />
                 <p className="chore-description">{chore.instructions}</p>
                 <div className="handoff-strip">
@@ -414,6 +423,11 @@ function MineView({ data }: { data: ChoreRelayData }) {
                   <PeriodRange range={assignment.period} />
                   <h2>{assignment.chore.name}</h2>
                 </div>
+                <MiniCalendar
+                  range={assignment.period}
+                  today={data.localToday}
+                  label={`${assignment.chore.name} assignment period`}
+                />
                 <p>{assignment.chore.instructions}</p>
                 <span className="handoff-source">
                   Assigned to {assignment.member.displayName}
@@ -442,9 +456,11 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
         )
       : [],
   );
-  const filteredAssignments = chronological(
-    data.household.periods.flatMap(({ assignments }) => assignments),
-  ).filter(
+  const displayedAssignments =
+    data.householdRange === "all"
+      ? data.householdList.items
+      : data.household.periods.flatMap(({ assignments }) => assignments);
+  const filteredAssignments = chronological(displayedAssignments).filter(
     (item) =>
       (!memberId || item.member.id === memberId) &&
       (!choreId || item.chore.id === choreId),
@@ -452,6 +468,22 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
   return (
     <section aria-labelledby="household-title">
       <ViewHeading id="household-title" title="Household schedule" />
+      <nav className="range-control" aria-label="Schedule range">
+        <Link
+          to="?view=household&range=upcoming"
+          preventScrollReset
+          aria-current={data.householdRange === "upcoming" ? "page" : undefined}
+        >
+          Upcoming
+        </Link>
+        <Link
+          to="?view=household&range=all"
+          preventScrollReset
+          aria-current={data.householdRange === "all" ? "page" : undefined}
+        >
+          All time
+        </Link>
+      </nav>
       <div className="filter-row" aria-label="Schedule filters">
         <label>
           Member
@@ -482,7 +514,9 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
           </select>
         </label>
       </div>
-      {data.household.state === "empty" ? (
+      {(data.householdRange === "all"
+        ? data.householdList.state
+        : data.household.state) === "empty" ? (
         <SystemState kind="empty" />
       ) : (
         <>
@@ -502,7 +536,6 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
                       <th scope="col">Period</th>
                       <th scope="col">Chore</th>
                       <th scope="col">On duty</th>
-                      <th scope="col">Assignment</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -519,22 +552,24 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
                           <th scope="row">
                             <PeriodRange range={assignment.period} />
                           </th>
-                          <td className="schedule-chore">
-                            <ChoreGlyph choreId={assignment.chore.id} />
-                            <strong>{assignment.chore.name}</strong>
+                          <td>
+                            <div className="schedule-chore">
+                              <ChoreGlyph choreId={assignment.chore.id} />
+                              <strong>{assignment.chore.name}</strong>
+                            </div>
                           </td>
                           <td>
                             <div className="schedule-person">
                               <Person member={assignment.member} size="small" />
-                              <strong>{assignment.member.displayName}</strong>
+                              <div>
+                                <strong>{assignment.member.displayName}</strong>
+                                <span className="assignment-source">
+                                  {assignment.source === "rotation"
+                                    ? "Rotation"
+                                    : "Changed"}
+                                </span>
+                              </div>
                             </div>
-                          </td>
-                          <td>
-                            <span className="assignment-source">
-                              {assignment.source === "rotation"
-                                ? "Rotation"
-                                : "Changed"}
-                            </span>
                             {current ? (
                               <span className="now-badge">Current turn</span>
                             ) : null}
@@ -574,6 +609,12 @@ function HouseholdView({ data }: { data: ChoreRelayData }) {
                   );
                 })}
               </ol>
+              {data.householdRange === "all" &&
+              data.householdList.page.nextOffset !== null ? (
+                <p className="range-limit-note" role="status">
+                  Showing the first {data.householdList.page.limit} assignments.
+                </p>
+              ) : null}
             </>
           )}
         </>
@@ -757,6 +798,9 @@ function ChangeDialog({
         event.preventDefault();
         if (!pending) onClose();
       }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !pending) onClose();
+      }}
     >
       <fetcher.Form method="post">
         <header className="dialog-header">
@@ -772,7 +816,7 @@ function ChangeDialog({
             ) : null}
           </div>
           <button
-            className="icon-button"
+            className="icon-button dialog-close"
             type="button"
             onClick={onClose}
             disabled={pending}

@@ -147,8 +147,8 @@ h3 {
 }
 
 :focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 3px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .skip-link {
@@ -1684,7 +1684,8 @@ select {
 
 .member-picker label.is-selected {
   border-color: var(--relay);
-  box-shadow: inset 0 0 0 1px var(--relay);
+  background: color-mix(in srgb, var(--relay-soft) 58%, var(--surface));
+  box-shadow: none;
 }
 
 .member-picker label:has(input:disabled) {
@@ -2335,6 +2336,207 @@ select {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focused schedule controls and assignment calendars */
+select {
+  appearance: none;
+  padding-right: 2.15rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1.5 1.5 4.5 4 4.5-4' fill='none' stroke='%23767a73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem 0.5rem;
+}
+
+select:focus-visible {
+  border-color: var(--focus);
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.filter-row select {
+  padding-right: 2.15rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1.5 1.5 4.5 4 4.5-4' fill='none' stroke='%23767a73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem 0.5rem;
+}
+
+.range-control {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 0 0.85rem;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.range-control a {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.range-control a[aria-current="page"] {
+  border-color: transparent;
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.range-limit-note {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.schedule-table {
+  min-width: 680px;
+  table-layout: fixed;
+}
+
+.schedule-table tbody tr {
+  height: 82px;
+}
+
+.schedule-table tbody th,
+.schedule-table tbody td {
+  height: 82px;
+  vertical-align: middle;
+}
+
+.schedule-table thead th:first-child,
+.schedule-table tbody th {
+  width: 210px;
+}
+
+.schedule-table thead th:nth-child(2) {
+  width: 190px;
+}
+
+.schedule-person > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.schedule-table td > .now-badge {
+  margin-top: 6px;
+}
+
+.mini-calendar {
+  width: 190px;
+  max-width: 100%;
+  margin-top: 11px;
+  border-collapse: separate;
+  border-spacing: 2px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  table-layout: fixed;
+}
+
+.mini-calendar caption {
+  margin-bottom: 3px;
+  color: var(--ink);
+  font-size: 0.66rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.mini-calendar th,
+.mini-calendar td {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.mini-calendar th {
+  height: 15px;
+  color: var(--faint);
+  font-size: 0.55rem;
+  font-weight: 650;
+}
+
+.mini-calendar td:not([data-in-range="true"]) {
+  color: var(--muted);
+}
+
+.mini-calendar td[data-in-range="true"] {
+  background: var(--relay-soft);
+  color: var(--relay-deep);
+  font-weight: 700;
+}
+
+.mini-calendar td[data-today="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--relay);
+}
+
+.handoff-card > .mini-calendar {
+  margin-left: 63px;
+}
+
+.mine-timeline article > .mini-calendar {
+  margin: 0 0 0 14px;
+}
+
+.change-dialog form {
+  position: relative;
+}
+
+.dialog-header {
+  padding-right: 36px;
+}
+
+.dialog-header .dialog-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: 1.35rem;
+}
+
+@media (max-width: 760px) {
+  .range-control {
+    display: flex;
+    width: 100%;
+  }
+
+  .range-control a {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .handoff-card > .mini-calendar {
+    margin-left: 0;
+  }
+
+  .mine-timeline article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mine-timeline article > .mini-calendar {
+    margin: 10px 0 0;
   }
 }
 

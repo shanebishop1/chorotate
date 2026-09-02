@@ -55,6 +55,19 @@ describe("home view navigation", () => {
       } as Parameters<typeof shouldRevalidate>[0]),
     ).toBe(false);
   });
+
+  it("reloads private schedule data when the household range changes", () => {
+    expect(
+      shouldRevalidate({
+        currentUrl: new URL(
+          "https://app.example.test/?view=household&range=upcoming",
+        ),
+        nextUrl: new URL("https://app.example.test/?view=household&range=all"),
+        formMethod: undefined,
+        defaultShouldRevalidate: true,
+      } as Parameters<typeof shouldRevalidate>[0]),
+    ).toBe(true);
+  });
 });
 
 class LocalStatement implements D1StatementLike {
@@ -237,6 +250,56 @@ describe("authenticated home route integration", () => {
     expect(
       result.history.operations.every(({ changes }) => changes.length >= 1),
     ).toBe(true);
+  });
+
+  it("excludes past assignments from Upcoming and includes them in bounded All time data", async () => {
+    const fixture = database();
+    fixture.sqlite
+      .prepare(
+        `INSERT INTO weekly_assignments
+         (id,household_id,local_week_start,chore_id,member_id,version,source,
+          actor_member_id,request_id,operation_id,operation_kind,occurred_at)
+         VALUES (?,?,?,?,?,1,'rotation',NULL,?,?, 'materialize',?)`,
+      )
+      .run(
+        "assignment:chorotate:2026-08-14:trash",
+        "chorotate",
+        "2026-08-14",
+        "trash",
+        "member-a",
+        "seed:past",
+        "seed:past",
+        "2026-08-14T00:00:00Z",
+      );
+
+    const upcoming = await loadHomeData(
+      new Request(`${config.canonicalOrigin}/?view=household&range=upcoming`),
+      fixture.database,
+      config,
+      loaderServices,
+    );
+    const allTime = await loadHomeData(
+      new Request(`${config.canonicalOrigin}/?view=household&range=all`),
+      fixture.database,
+      config,
+      loaderServices,
+    );
+
+    expect(
+      upcoming.state === "ready" &&
+        upcoming.householdList.items.some(
+          ({ assignmentId }) =>
+            assignmentId === "assignment:chorotate:2026-08-14:trash",
+        ),
+    ).toBe(false);
+    expect(
+      allTime.state === "ready" &&
+        allTime.householdList.items.some(
+          ({ assignmentId }) =>
+            assignmentId === "assignment:chorotate:2026-08-14:trash",
+        ),
+    ).toBe(true);
+    expect(allTime.state === "ready" && allTime.householdRange).toBe("all");
   });
 
   it("performs a direct reassignment with server IDs and exposes it once in grouped history", async () => {

@@ -17,7 +17,10 @@ import {
   ChoreRelayShell,
   type ChoreRelayData,
 } from "../features/chore-relay/chore-relay-shell";
-import { normalizeView } from "../features/chore-relay/model";
+import {
+  normalizeHouseholdRange,
+  normalizeView,
+} from "../features/chore-relay/model";
 import { cloudflareContext } from "../runtime/context";
 import type { RuntimeConfig } from "../runtime/environment";
 import type { Route } from "./+types/home";
@@ -75,7 +78,9 @@ export async function loadHomeData(
   config: RuntimeConfig,
   dependencies: HomeServices = services,
 ): Promise<HomeLoaderData> {
-  const view = normalizeView(new URL(request.url).searchParams.get("view"));
+  const search = new URL(request.url).searchParams;
+  const view = normalizeView(search.get("view"));
+  const householdRange = normalizeHouseholdRange(search.get("range"));
   try {
     const member = await dependencies.authorize(request, database, config);
     const now = dependencies.now();
@@ -84,7 +89,14 @@ export async function loadHomeData(
       await Promise.all([
         getCurrentAndNext(context, { request, now }),
         getPersonalAgenda(context, { request, now, limit: 100 }),
-        getHouseholdList(context, { request, now, limit: 100 }),
+        getHouseholdList(context, {
+          request,
+          now,
+          limit: 100,
+          ...(householdRange === "all"
+            ? { fromDate: "0001-01-01", toDate: "9999-12-31" }
+            : {}),
+        }),
         getHouseholdCalendar(context, { request, now }),
         getGroupedHistory(context, { request, limit: 25 }),
         getActiveMembers(context, { request }),
@@ -93,6 +105,8 @@ export async function loadHomeData(
       state: "ready",
       view,
       signedInMember: member,
+      householdRange,
+      localToday: localDateAt(now, config.household.timeZone),
       current,
       mine,
       householdList,
@@ -109,6 +123,19 @@ export async function loadHomeData(
     }
     return { state: "unavailable", view };
   }
+}
+
+function localDateAt(value: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const byType = Object.fromEntries(
+    parts.map(({ type, value: part }) => [type, part]),
+  );
+  return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
 export async function loader({

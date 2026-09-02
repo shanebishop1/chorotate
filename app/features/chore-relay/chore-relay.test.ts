@@ -115,6 +115,8 @@ const data: ChoreRelayData = {
     displayName: "Member D",
     imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
   },
+  householdRange: "upcoming",
+  localToday: "2026-08-31",
   current: {
     state: "ready",
     handoffs: chores.map((chore) => ({

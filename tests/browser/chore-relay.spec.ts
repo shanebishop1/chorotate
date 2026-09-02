@@ -19,9 +19,9 @@ for (const [view, heading] of views) {
     await expect(
       page.getByRole("navigation", { name: "ChoRotate views" }),
     ).toBeVisible();
-    await expect(page.locator(`a[aria-current="page"]`)).toHaveText(
-      new RegExp(view, "i"),
-    );
+    await expect(
+      page.locator(`.primary-nav a[aria-current="page"]`),
+    ).toHaveText(new RegExp(view, "i"));
 
     const dimensions = await page.evaluate(() => ({
       documentWidth: document.documentElement.scrollWidth,
@@ -253,6 +253,37 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
   await expect(opener).toBeFocused();
 });
 
+test("dialog closes only from its backdrop and protects pending changes", async ({
+  page,
+}) => {
+  await page.goto("/?view=now&pending=1");
+  const opener = page.getByRole("button", { name: "Swap two turns" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Swap two turns" });
+
+  await dialog.locator("form").click({ position: { x: 8, y: 8 } });
+  await expect(dialog).toBeVisible();
+
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(Math.max(1, box!.x - 5), Math.max(1, box!.y - 5));
+  await expect(dialog).toBeHidden();
+  await expect(opener).toBeFocused();
+
+  await opener.click();
+  await page.getByLabel("First turn").selectOption("2026-08-28-trash");
+  await page.getByLabel("Second turn").selectOption("2026-08-31-dishwasher");
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  const pendingBox = await dialog.boundingBox();
+  await page.mouse.click(
+    Math.max(1, pendingBox!.x - 5),
+    Math.max(1, pendingBox!.y - 5),
+  );
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeHidden({ timeout: 4_000 });
+});
+
 test("current and next handoffs name each chore-specific period at point of use", async ({
   page,
 }) => {
@@ -283,6 +314,17 @@ test("assignment, household, and history states keep chore periods attached", as
   await expect(
     page.locator('th[scope="col"]', { hasText: "Period" }),
   ).toBeAttached();
+  await expect(
+    page.locator('th[scope="col"]', { hasText: "Assignment" }),
+  ).toHaveCount(0);
+  const rowCellHeights = await page
+    .locator(".schedule-table tbody tr")
+    .first()
+    .locator(":scope > th, :scope > td")
+    .evaluateAll((cells) =>
+      cells.map((cell) => cell.getBoundingClientRect().height),
+    );
+  expect(new Set(rowCellHeights).size).toBe(1);
   await expect(page.locator("main")).not.toContainText(/Turn 1|Dates by chore/);
 
   const periodStarts = await page
@@ -301,6 +343,44 @@ test("assignment, household, and history states keep chore periods attached", as
   await page.goto("/?view=history");
   await expect(page.locator("main")).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(page.locator("main")).toContainText("Mon, Aug 31 – Sun, Sep 6");
+});
+
+test("mini calendars expose active ownership dates and the local today marker", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const calendar = page
+    .getByRole("table", { name: "Trash current period" })
+    .first();
+  await expect(calendar).toBeVisible();
+  await expect(calendar.locator('[data-in-range="true"]')).toHaveCount(7);
+  await expect(calendar.locator('[data-date="2026-08-31"]')).toHaveAttribute(
+    "data-today",
+    "true",
+  );
+
+  await page.goto("/?view=mine");
+  await expect(page.locator(".mini-calendar")).toHaveCount(2);
+  await expect(
+    page.locator('.mini-calendar [data-in-range="true"]'),
+  ).toHaveCount(14);
+});
+
+test("household range is URL-backed and All time includes server-provided past data", async ({
+  page,
+}) => {
+  await page.goto("/?view=household&range=upcoming");
+  await expect(page.getByRole("link", { name: "Upcoming" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.locator("main")).not.toContainText("Fri, Aug 14");
+
+  await page.getByRole("link", { name: "All time" }).click();
+  await expect(page).toHaveURL(/view=household&range=all/);
+  await expect(page.locator("main")).toContainText("Fri, Aug 14 – Thu, Aug 20");
+  await page.goBack();
+  await expect(page).toHaveURL(/range=upcoming/);
 });
 
 test("safe reminder states are useful without exposing contact or provider data", async ({
@@ -332,6 +412,14 @@ test("the chronological household schedule reflows at 320px", async ({
   expect(fit.documentWidth).toBeLessThanOrEqual(fit.viewportWidth);
   for (const select of await page.getByRole("combobox").all()) {
     expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(
+      await select.evaluate((element) => getComputedStyle(element).appearance),
+    ).toBe("none");
+    expect(
+      await select.evaluate(
+        (element) => getComputedStyle(element).backgroundPositionX,
+      ),
+    ).toContain("calc(100% - 12px)");
   }
 });
 
