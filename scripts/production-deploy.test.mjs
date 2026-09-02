@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -114,7 +115,7 @@ test("returns only fixed successful dry-run and deploy checks", () => {
 
 test("cleans temporary and emitted configs after success or failure", async () => {
   const testDirectory = mkdtempSync(
-    join(resolve("build"), "production-deploy-test-"),
+    join(tmpdir(), "chorotate-production-deploy-test-"),
   );
   const emittedConfigPath = join(testDirectory, "wrangler.json");
   let temporaryDirectory = "";
