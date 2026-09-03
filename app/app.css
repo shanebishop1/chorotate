@@ -2918,7 +2918,6 @@ html[data-theme="dark"] .theme-icon-dark {
 .profile-trigger .person {
   width: 30px;
   height: 30px;
-  border: 0;
 }
 
 .profile-popover {
@@ -3073,7 +3072,7 @@ html[data-theme="dark"] .theme-icon-dark {
 }
 
 .person {
-  border-color: color-mix(in srgb, currentColor 45%, var(--line));
+  border: 0;
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0;
