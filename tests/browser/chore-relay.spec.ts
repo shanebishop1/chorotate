@@ -525,15 +525,8 @@ test("household range is URL-backed and All time includes server-provided past d
     "aria-current",
     "page",
   );
-  await expect(
-    page.getByRole("navigation", { name: "Schedule range" }),
-  ).toHaveAttribute("aria-busy", "true");
-  await expect(page.locator("main")).not.toContainText("Fri, Aug 14");
   await expect(page).toHaveURL(/view=household&range=all/);
   await expect(page.locator("main")).toContainText("Fri, Aug 14 – Thu, Aug 20");
-  await expect(
-    page.getByRole("navigation", { name: "Schedule range" }),
-  ).toHaveAttribute("aria-busy", "false");
   await expect(page.getByText("Turns in All time")).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/range=upcoming/);

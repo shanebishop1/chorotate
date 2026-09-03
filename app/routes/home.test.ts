@@ -71,7 +71,7 @@ describe("home view navigation", () => {
     ).toBe(false);
   });
 
-  it("reloads private schedule data when the household range changes", () => {
+  it("does not reload private schedule data when the household range changes", () => {
     expect(
       shouldRevalidate({
         currentUrl: new URL(
@@ -81,7 +81,7 @@ describe("home view navigation", () => {
         formMethod: undefined,
         defaultShouldRevalidate: true,
       } as Parameters<typeof shouldRevalidate>[0]),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -268,7 +268,7 @@ describe("authenticated home route integration", () => {
     ).toBe(true);
   });
 
-  it("excludes past assignments from Upcoming and includes them in bounded All time data", async () => {
+  it("loads the full household list once so range tabs switch without refetching", async () => {
     const fixture = database();
     await prepareCurrentSchedule(fixture.database, actor, { now });
     fixture.sqlite
@@ -308,7 +308,7 @@ describe("authenticated home route integration", () => {
           ({ assignmentId }) =>
             assignmentId === "assignment:chorotate:2026-08-14:trash",
         ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       allTime.state === "ready" &&
         allTime.householdList.items.some(
@@ -316,15 +316,13 @@ describe("authenticated home route integration", () => {
             assignmentId === "assignment:chorotate:2026-08-14:trash",
         ),
     ).toBe(true);
+    expect(upcoming.state === "ready" && upcoming.householdRange).toBe(
+      "upcoming",
+    );
     expect(allTime.state === "ready" && allTime.householdRange).toBe("all");
     if (upcoming.state !== "ready" || allTime.state !== "ready") return;
-    expect(
-      upcoming.householdList.items.every(
-        ({ period }) =>
-          period.localStartDate >= "2026-08-25" &&
-          period.localStartDate <= "2026-09-30",
-      ),
-    ).toBe(true);
+    expect(upcoming.householdList.items).toHaveLength(107);
+    expect(upcoming.householdList.page.nextOffset).toBeNull();
     expect(
       upcoming.household.periods.every(
         ({ period }) =>

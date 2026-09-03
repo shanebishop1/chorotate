@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useNavigation } from "react-router";
+import { Link, useFetcher, useSearchParams } from "react-router";
 
 import type { AuthorizedMember } from "../../auth/access";
 import type {
@@ -456,15 +456,10 @@ function HouseholdView({
 }) {
   const [memberId, setMemberId] = useState("");
   const [choreId, setChoreId] = useState("");
-  const navigation = useNavigation();
-  const pendingRange =
-    navigation.state !== "idle" && navigation.location
-      ? new URLSearchParams(navigation.location.search).get("range") === "all"
-        ? "all"
-        : "upcoming"
-      : undefined;
-  const visibleRange = pendingRange ?? data.householdRange;
-  const rangePending = pendingRange !== undefined;
+  const [searchParams] = useSearchParams();
+  // The loader always provides the full assignment list, so range switches
+  // stay on already-loaded data and never refetch.
+  const visibleRange = searchParams.get("range") === "all" ? "all" : "upcoming";
   const chores = unique(
     data.householdList.items.map(({ chore }) => chore),
     ({ id }) => id,
@@ -477,7 +472,7 @@ function HouseholdView({
       : [],
   );
   const displayedAssignments =
-    data.householdRange === "all"
+    visibleRange === "all"
       ? data.householdList.items
       : data.household.periods.flatMap(({ assignments }) => assignments);
   const filteredAssignments = chronological(displayedAssignments).filter(
@@ -507,11 +502,7 @@ function HouseholdView({
           </button>
         }
       />
-      <nav
-        className="range-control"
-        aria-label="Schedule range"
-        aria-busy={rangePending}
-      >
+      <nav className="range-control" aria-label="Schedule range">
         <Link
           to="?view=household&range=upcoming"
           preventScrollReset
@@ -545,13 +536,13 @@ function HouseholdView({
           onChange={setChoreId}
         />
       </div>
-      {data.householdRange === "all" ? (
+      {visibleRange === "all" ? (
         <TurnTallies
           assignments={data.householdList.items}
           truncated={data.householdList.page.nextOffset !== null}
         />
       ) : null}
-      {(data.householdRange === "all"
+      {(visibleRange === "all"
         ? data.householdList.state
         : data.household.state) === "empty" ? (
         <SystemState kind="empty" />
@@ -660,7 +651,7 @@ function HouseholdView({
                   );
                 })}
               </ol>
-              {data.householdRange === "all" &&
+              {visibleRange === "all" &&
               data.householdList.page.nextOffset !== null ? (
                 <p className="range-limit-note" role="status">
                   Showing the first {data.householdList.page.limit} assignments.
@@ -1439,11 +1430,7 @@ function SystemState({
             "Nothing is scheduled yet",
             "The household schedule has no assignments in this view.",
           ]
-        : [
-            "cloud",
-            "No schedule found",
-            "We couldn't load the schedule. Try again in a moment.",
-          ];
+        : ["cloud", "No schedule found"];
   return (
     <div
       className={`system-state state-${kind}`}
@@ -1452,14 +1439,9 @@ function SystemState({
       <Icon name={content[0]} />
       <div>
         <h1>{content[1]}</h1>
-        <p>{content[2]}</p>
+        {content[2] ? <p>{content[2]}</p> : null}
         {kind === "unauthorized" ? <AuthControl kind="sign-in" /> : null}
         {kind === "empty" ? <MaterializeControl /> : null}
-        {kind === "unavailable" ? (
-          <a className="text-button" href="?view=now">
-            Try again <span aria-hidden="true">→</span>
-          </a>
-        ) : null}
       </div>
     </div>
   );

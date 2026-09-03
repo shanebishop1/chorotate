@@ -241,17 +241,16 @@ function Fixture() {
   const endedAssignment = endedAssignments.find(
     ({ chore }) => chore.id === endedChore,
   );
-  const rangeData: ChoreRelayData =
-    search.get("range") === "all"
-      ? {
-          ...data,
-          householdRange: "all",
-          householdList: {
-            ...data.householdList,
-            items: [pastAssignment, ...data.householdList.items],
-          },
-        }
-      : data;
+  // The loader always provides the full list; the shell picks the range tab
+  // client-side from the URL with no refetch.
+  const rangeData: ChoreRelayData = {
+    ...data,
+    householdRange: search.get("range") === "all" ? "all" : "upcoming",
+    householdList: {
+      ...data.householdList,
+      items: [pastAssignment, ...data.householdList.items],
+    },
+  };
   const fixtureData = endedAssignment
     ? {
         ...rangeData,

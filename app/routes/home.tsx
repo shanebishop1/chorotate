@@ -108,19 +108,12 @@ export async function loadHomeData(
     ] = await Promise.all([
       getCurrentAndNext(context, { request, now }),
       getPersonalAgenda(context, { request, now, limit: 100 }),
-      householdRange === "all"
-        ? getBoundedHouseholdList(context, {
-            request,
-            now,
-            fromDate: "0001-01-01",
-            toDate: "9999-12-31",
-          })
-        : getHouseholdList(context, {
-            request,
-            now,
-            limit: READ_PAGE_SIZE,
-            ...upcomingWindow,
-          }),
+      getBoundedHouseholdList(context, {
+        request,
+        now,
+        fromDate: "0001-01-01",
+        toDate: "9999-12-31",
+      }),
       getHouseholdCalendar(context, {
         request,
         now,
@@ -237,11 +230,13 @@ export function shouldRevalidate({
   const current = new URLSearchParams(currentUrl.search);
   const next = new URLSearchParams(nextUrl.search);
   const viewChanged = current.get("view") !== next.get("view");
+  const rangeChanged = current.get("range") !== next.get("range");
   current.delete("view");
   next.delete("view");
-  return viewChanged && current.toString() === next.toString()
-    ? false
-    : defaultShouldRevalidate;
+  current.delete("range");
+  next.delete("range");
+  if (current.toString() !== next.toString()) return defaultShouldRevalidate;
+  return viewChanged || rangeChanged ? false : defaultShouldRevalidate;
 }
 
 export type HomeActionData =
