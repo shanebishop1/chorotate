@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useSearchParams } from "react-router";
+import { Link, useFetcher } from "react-router";
 
 import type { AuthorizedMember } from "../../auth/access";
 import type {
@@ -17,7 +17,7 @@ import type { HomeActionData } from "../../routes/home";
 import { views, type ChorePeriodRange, type ChoreRelayView } from "./model";
 import type { HouseholdRange } from "./model";
 import { MiniCalendar } from "./mini-calendar";
-import { CustomDropdown, type DropdownOption } from "./custom-dropdown";
+import { CustomDropdown } from "./custom-dropdown";
 
 export interface ChoreRelayData {
   signedInMember: AuthorizedMember;
@@ -454,43 +454,7 @@ function HouseholdView({
   onReassign(assignmentId: string): void;
   onSwap(): void;
 }) {
-  const [memberId, setMemberId] = useState("");
-  const [choreId, setChoreId] = useState("");
-  const [searchParams] = useSearchParams();
-  // The loader always provides the full assignment list, so range switches
-  // stay on already-loaded data and never refetch.
-  const visibleRange = searchParams.get("range") === "all" ? "all" : "upcoming";
-  const chores = unique(
-    data.householdList.items.map(({ chore }) => chore),
-    ({ id }) => id,
-  );
-  const currentAssignmentIds = new Set(
-    data.current.state === "ready"
-      ? data.current.handoffs.flatMap(({ current }) =>
-          current ? [current.assignmentId] : [],
-        )
-      : [],
-  );
-  const displayedAssignments =
-    visibleRange === "all"
-      ? data.householdList.items
-      : data.household.periods.flatMap(({ assignments }) => assignments);
-  const filteredAssignments = chronological(displayedAssignments).filter(
-    (item) =>
-      (!memberId || item.member.id === memberId) &&
-      (!choreId || item.chore.id === choreId),
-  );
-  const memberOptions: DropdownOption[] = [
-    { value: "", label: "Everyone" },
-    ...data.activeMembers.map((member) => ({
-      value: member.id,
-      label: member.displayName,
-    })),
-  ];
-  const choreOptions: DropdownOption[] = [
-    { value: "", label: "All chores" },
-    ...chores.map((chore) => ({ value: chore.id, label: chore.name })),
-  ];
+  const [visibleMonth, setVisibleMonth] = useState(data.localToday.slice(0, 7));
   return (
     <section aria-labelledby="household-title">
       <ViewHeading
@@ -502,191 +466,200 @@ function HouseholdView({
           </button>
         }
       />
-      <nav className="range-control" aria-label="Schedule range">
-        <Link
-          to="?view=household&range=upcoming"
-          preventScrollReset
-          prefetch="render"
-          aria-current={visibleRange === "upcoming" ? "page" : undefined}
-        >
-          Upcoming
-        </Link>
-        <Link
-          to="?view=household&range=all"
-          preventScrollReset
-          prefetch="render"
-          aria-current={visibleRange === "all" ? "page" : undefined}
-        >
-          All time
-        </Link>
-      </nav>
-      <div className="filter-row" aria-label="Schedule filters">
-        <CustomDropdown
-          id="member-filter"
-          label="Member"
-          value={memberId}
-          options={memberOptions}
-          onChange={setMemberId}
-        />
-        <CustomDropdown
-          id="chore-filter"
-          label="Chore"
-          value={choreId}
-          options={choreOptions}
-          onChange={setChoreId}
-        />
-      </div>
-      {visibleRange === "all" ? (
-        <TurnTallies
-          assignments={data.householdList.items}
-          truncated={data.householdList.page.nextOffset !== null}
-        />
-      ) : null}
-      {(visibleRange === "all"
-        ? data.householdList.state
-        : data.household.state) === "empty" ? (
+      <TurnTallies
+        assignments={data.householdList.items}
+        truncated={data.householdList.page.nextOffset !== null}
+      />
+      {data.householdList.state === "empty" ? (
         <SystemState kind="empty" />
       ) : (
-        <>
-          {filteredAssignments.length === 0 ? (
-            <p className="filtered-empty" role="status">
-              No assignments match these filters.
-            </p>
-          ) : (
-            <>
-              <div className="schedule-table-wrap">
-                <table className="schedule-table">
-                  <caption>
-                    Chronological household schedule with chore-specific periods
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Period</th>
-                      <th scope="col">Chore</th>
-                      <th scope="col">On duty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAssignments.map((assignment) => {
-                      const current = currentAssignmentIds.has(
-                        assignment.assignmentId,
-                      );
-                      return (
-                        <tr
-                          key={assignment.assignmentId}
-                          data-period-start={assignment.period.localStartDate}
-                          className={current ? "is-current" : undefined}
-                        >
-                          <th scope="row">
-                            <PeriodRange range={assignment.period} />
-                          </th>
-                          <td>
-                            <div className="schedule-chore">
-                              <ChoreGlyph choreId={assignment.chore.id} />
-                              <strong>{assignment.chore.name}</strong>
-                            </div>
-                          </td>
-                          <td className="on-duty-cell">
-                            <button
-                              className="schedule-assignment-button"
-                              type="button"
-                              aria-label={assignmentActionLabel(assignment)}
-                              onClick={() =>
-                                onReassign(assignment.assignmentId)
-                              }
-                            >
-                              <AssignmentOwner
-                                assignment={assignment}
-                                current={current}
-                              />
-                              <span
-                                className="schedule-edit-cue"
-                                aria-hidden="true"
-                              >
-                                ›
-                              </span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <ol
-                className="schedule-list"
-                aria-label="Chronological household schedule"
-              >
-                {filteredAssignments.map((assignment) => {
-                  const current = currentAssignmentIds.has(
-                    assignment.assignmentId,
-                  );
-                  return (
-                    <li
-                      key={assignment.assignmentId}
-                      data-period-start={assignment.period.localStartDate}
-                      className={current ? "is-current" : undefined}
-                    >
-                      <button
-                        className="schedule-card-button"
-                        type="button"
-                        aria-label={assignmentActionLabel(assignment)}
-                        onClick={() => onReassign(assignment.assignmentId)}
-                      >
-                        <ChoreGlyph choreId={assignment.chore.id} />
-                        <div>
-                          <small>{assignment.chore.name}</small>
-                          <strong>{assignment.member.displayName}</strong>
-                          <PeriodRange range={assignment.period} />
-                          {current ? (
-                            <span className="now-badge">Current turn</span>
-                          ) : null}
-                          <ReminderStatus reminder={assignment.reminder} />
-                        </div>
-                        <span className="schedule-edit-cue" aria-hidden="true">
-                          ›
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-              {visibleRange === "all" &&
-              data.householdList.page.nextOffset !== null ? (
-                <p className="range-limit-note" role="status">
-                  Showing the first {data.householdList.page.limit} assignments.
-                </p>
-              ) : null}
-            </>
-          )}
-        </>
+        <MonthCalendar
+          assignments={data.householdList.items}
+          month={visibleMonth}
+          today={data.localToday}
+          onMonthChange={setVisibleMonth}
+          onReassign={onReassign}
+        />
       )}
     </section>
   );
 }
 
-function AssignmentOwner({
-  assignment,
-  current,
+const calendarWeekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function MonthCalendar({
+  assignments,
+  month,
+  today,
+  onMonthChange,
+  onReassign,
 }: {
-  assignment: ProjectedAssignment;
-  current: boolean;
+  assignments: ProjectedAssignment[];
+  month: string;
+  today: string;
+  onMonthChange(month: string): void;
+  onReassign(assignmentId: string): void;
 }) {
-  return (
-    <>
-      <div className="schedule-person">
-        <Person member={assignment.member} size="small" />
-        <div>
-          <strong>{assignment.member.displayName}</strong>
-          <span className="assignment-source">
-            {assignment.source === "rotation" ? "Rotation" : "Changed"}
-          </span>
-        </div>
-      </div>
-      {current ? <span className="now-badge">Current turn</span> : null}
-      <ReminderStatus reminder={assignment.reminder} />
-    </>
+  const firstOfMonth = `${month}-01`;
+  const monthDate = parseCalendarDate(firstOfMonth);
+  const lastDay = new Date(monthDate);
+  lastDay.setUTCMonth(lastDay.getUTCMonth() + 1);
+  lastDay.setUTCDate(0);
+  const lastOfMonth = lastDay.toISOString().slice(0, 10);
+  const gridStart = addCalendarDays(firstOfMonth, -monthDate.getUTCDay());
+  const gridEnd = addCalendarDays(
+    lastOfMonth,
+    6 - parseCalendarDate(lastOfMonth).getUTCDay(),
   );
+  const dates: string[] = [];
+  for (let date = gridStart; date <= gridEnd; date = addCalendarDays(date, 1))
+    dates.push(date);
+  const weeks = Array.from({ length: dates.length / 7 }, (_, index) =>
+    dates.slice(index * 7, index * 7 + 7),
+  );
+  const heading = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(monthDate);
+
+  return (
+    <section
+      className="month-calendar"
+      aria-labelledby="calendar-month-heading"
+    >
+      <header className="month-calendar-header">
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Previous month"
+          onClick={() => onMonthChange(shiftCalendarMonth(month, -1))}
+        >
+          <span aria-hidden="true">‹</span>
+        </button>
+        <div>
+          <span>Household calendar</span>
+          <h2 id="calendar-month-heading" aria-live="polite">
+            {heading}
+          </h2>
+        </div>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Next month"
+          onClick={() => onMonthChange(shiftCalendarMonth(month, 1))}
+        >
+          <span aria-hidden="true">›</span>
+        </button>
+      </header>
+      <div className="month-calendar-grid" aria-label={heading}>
+        <div className="month-weekdays" aria-hidden="true">
+          {calendarWeekdays.map((weekday) => (
+            <span key={weekday}>{weekday}</span>
+          ))}
+        </div>
+        {weeks.map((week) => {
+          const weekStart = week[0]!;
+          const weekEnd = week[6]!;
+          const weekAssignments = chronological(assignments).filter(
+            ({ period }) =>
+              period.localStartDate <= weekEnd &&
+              period.localEndDateInclusive >= weekStart,
+          );
+          return (
+            <div className="month-week" key={weekStart}>
+              <div className="month-days">
+                {week.map((date) => (
+                  <time
+                    key={date}
+                    dateTime={date}
+                    data-outside-month={date.slice(0, 7) !== month || undefined}
+                    data-today={date === today || undefined}
+                    aria-current={date === today ? "date" : undefined}
+                    aria-label={accessibleCalendarDate(date)}
+                  >
+                    {Number(date.slice(-2))}
+                  </time>
+                ))}
+              </div>
+              <div
+                className="month-assignment-lanes"
+                style={{
+                  gridTemplateRows: `repeat(${weekAssignments.length}, 32px)`,
+                }}
+              >
+                {weekAssignments.map((assignment, index) => {
+                  const segmentStart =
+                    assignment.period.localStartDate < weekStart
+                      ? weekStart
+                      : assignment.period.localStartDate;
+                  const segmentEnd =
+                    assignment.period.localEndDateInclusive > weekEnd
+                      ? weekEnd
+                      : assignment.period.localEndDateInclusive;
+                  const columnStart = week.indexOf(segmentStart) + 1;
+                  const columnEnd = week.indexOf(segmentEnd) + 2;
+                  const choreTone =
+                    assignment.chore.id === "trash"
+                      ? "is-trash"
+                      : assignment.chore.id === "dishwasher"
+                        ? "is-dishwasher"
+                        : "is-other";
+                  return (
+                    <button
+                      key={`${assignment.assignmentId}-${weekStart}`}
+                      className={`month-assignment ${choreTone}`}
+                      type="button"
+                      style={{
+                        gridColumn: `${columnStart} / ${columnEnd}`,
+                        gridRow: index + 1,
+                      }}
+                      aria-label={assignmentActionLabel(assignment)}
+                      title={`${assignment.chore.name}: ${assignment.member.displayName}`}
+                      onClick={() => onReassign(assignment.assignmentId)}
+                    >
+                      <ChoreGlyph choreId={assignment.chore.id} />
+                      <span className="month-assignment-chore">
+                        {assignment.chore.name}
+                      </span>
+                      <Person member={assignment.member} size="tiny" />
+                      <strong>{assignment.member.displayName}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function parseCalendarDate(localDate: string): Date {
+  return new Date(`${localDate}T00:00:00Z`);
+}
+
+function addCalendarDays(localDate: string, days: number): string {
+  const date = parseCalendarDate(localDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftCalendarMonth(month: string, amount: number): string {
+  const date = parseCalendarDate(`${month}-01`);
+  date.setUTCMonth(date.getUTCMonth() + amount);
+  return date.toISOString().slice(0, 7);
+}
+
+function accessibleCalendarDate(localDate: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parseCalendarDate(localDate));
 }
 
 function assignmentActionLabel(assignment: ProjectedAssignment): string {
@@ -714,7 +687,7 @@ function TurnTallies({
   return (
     <section className="turn-tallies" aria-labelledby="turn-tallies-title">
       <h2 id="turn-tallies-title">
-        {truncated ? "Turns in assignments shown" : "Turns in All time"}
+        {truncated ? "Assigned turns shown" : "Assigned turns"}
       </h2>
       <ul>
         {tallies.map(({ member, turns }) => (
@@ -1741,6 +1714,7 @@ function ReminderStatus({ reminder }: { reminder: ProjectedReminderStatus }) {
     });
   }
   for (const occurrence of reminder.occurrences) {
+    if (occurrence.result === "pending") continue;
     const phase = occurrence.phase === "evening" ? "Evening" : "Morning";
     const details =
       occurrence.result === "accepted"
@@ -1749,23 +1723,17 @@ function ReminderStatus({ reminder }: { reminder: ProjectedReminderStatus }) {
             tone: "positive" as const,
             text: `${phase} reminder accepted for sending`,
           }
-        : occurrence.result === "pending"
+        : occurrence.result === "delivery_unknown"
           ? {
-              icon: "calendar" as const,
-              tone: "neutral" as const,
-              text: `${phase} reminder planned`,
+              icon: "alert" as const,
+              tone: "attention" as const,
+              text: `Reminder delivery unconfirmed (${occurrence.phase})`,
             }
-          : occurrence.result === "delivery_unknown"
-            ? {
-                icon: "alert" as const,
-                tone: "attention" as const,
-                text: `Reminder delivery unconfirmed (${occurrence.phase})`,
-              }
-            : {
-                icon: "alert" as const,
-                tone: "attention" as const,
-                text: `${phase} reminder missed`,
-              };
+          : {
+              icon: "alert" as const,
+              tone: "attention" as const,
+              text: `${phase} reminder missed`,
+            };
     messages.push({
       key: `${occurrence.phase}-${occurrence.result}`,
       ...details,

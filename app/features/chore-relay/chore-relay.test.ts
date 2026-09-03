@@ -253,26 +253,28 @@ describe("Chore Relay integrated rendering", () => {
     }
   });
 
-  it("renders chronological Mine and responsive Household representations", () => {
+  it("renders chronological Mine and a navigable Household month calendar", () => {
     const mine = render("mine");
     expect(mine).toContain("Your upcoming chores");
     expect(mine).not.toContain("Your lane");
     expect(mine).not.toContain("Personal route");
     const household = render("household");
-    expect(household).toContain("<table");
-    expect(household).toContain("<caption");
-    expect(household).toContain('class="schedule-list"');
-    expect(household).toContain("Member");
-    expect(household).toContain("Chore");
-    expect(household).toContain("Current turn");
-    expect(household).toContain("Period");
+    expect(household).toContain('class="month-calendar"');
+    expect(household).toContain("August 2026");
+    expect(household).toContain("Previous month");
+    expect(household).toContain("Next month");
+    expect(household).toContain("Assigned turns");
     expect(household).toContain("Swap two turns");
     expect(household).toContain("Reassign Trash");
-    expect(household).not.toContain("<select");
-    expect(household).not.toContain("Turn 1");
-    expect(household.indexOf("Fri, Aug 28 – Thu, Sep 3")).toBeLessThan(
-      household.indexOf("Mon, Aug 31 – Sun, Sep 6"),
-    );
+    expect(household).not.toContain("Upcoming");
+    expect(household).not.toContain("All time");
+    expect(household).not.toContain("Schedule filters");
+    expect(household).not.toContain('class="schedule-list"');
+  });
+
+  it("omits planned reminder badges", () => {
+    const html = render("now");
+    expect(html).not.toContain("reminder planned");
   });
 
   it("surfaces reminder outcomes and corrections without provider or contact data", () => {
@@ -331,8 +333,7 @@ describe("Chore Relay integrated rendering", () => {
   it("emits theme and mobile/desktop controls in server-rendered markup", () => {
     const html = render("household");
     expect(html).toContain("Switch color mode");
-    expect(html).toContain("schedule-table-wrap");
-    expect(html).toContain("schedule-list");
+    expect(html).toContain("month-calendar");
   });
 
   it("omits promotional and legal footer content", () => {

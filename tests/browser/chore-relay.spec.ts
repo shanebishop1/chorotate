@@ -212,21 +212,28 @@ test("custom dropdown supports keyboard, mouse, tab, escape, and outside dismiss
   page,
 }) => {
   await page.goto("/?view=household");
+  await page.getByRole("button", { name: "Swap two turns" }).click();
   await expect(page.locator("select")).toHaveCount(0);
-  const trigger = page.locator("#member-filter-button");
-  await expect(trigger).toHaveAccessibleName("Member: Everyone");
+  const trigger = page.locator("#first-assignment-button");
+  await expect(trigger).toHaveAccessibleName(
+    "First turn: Choose an assignment",
+  );
 
   await trigger.focus();
   await trigger.press("ArrowDown");
-  const listbox = page.getByRole("listbox", { name: "Member options" });
+  const listbox = page.getByRole("listbox", {
+    name: "First turn options",
+  });
   await expect(listbox).toBeVisible();
   await expect(listbox).toBeFocused();
   await listbox.press("End");
   const activeId = await listbox.getAttribute("aria-activedescendant");
   expect(activeId).toBeTruthy();
-  await expect(page.locator(`#${activeId}`)).toHaveText("Member D");
+  const keyboardSelection = (await page.locator(`#${activeId}`).textContent())!;
   await listbox.press("Enter");
-  await expect(trigger).toHaveAccessibleName("Member: Member D");
+  await expect(trigger).toHaveAccessibleName(
+    `First turn: ${keyboardSelection}`,
+  );
 
   await trigger.press("Enter");
   await expect(listbox).toBeVisible();
@@ -239,17 +246,20 @@ test("custom dropdown supports keyboard, mouse, tab, escape, and outside dismiss
   await expect(listbox).toBeHidden();
 
   await trigger.click();
-  const member-b = listbox.getByRole("option", { name: "Member B" });
-  await member-b.click();
-  await expect(trigger).toHaveAccessibleName("Member: Member B");
+  const mouseSelection = listbox.getByRole("option").nth(1);
+  const mouseSelectionName = (await mouseSelection.textContent())!;
+  await mouseSelection.click();
+  await expect(trigger).toHaveAccessibleName(
+    `First turn: ${mouseSelectionName}`,
+  );
   await trigger.click();
-  const selected = listbox.getByRole("option", { name: "Member B" });
+  const selected = listbox.getByRole("option", { name: mouseSelectionName });
   await expect(selected).toHaveAttribute("aria-selected", "true");
   await expect(selected).toHaveCSS("border-top-width", "0px");
   expect(
     await selected.evaluate((node) => getComputedStyle(node).boxShadow),
   ).toBe("none");
-  await page.getByRole("heading", { name: "Household schedule" }).click();
+  await page.getByRole("heading", { name: "Swap two turns" }).click();
   await expect(listbox).toBeHidden();
 });
 
@@ -268,27 +278,15 @@ test("Household owns swap and every rendered on-duty cell opens its assignment",
   await expect(
     page.getByRole("button", { name: "Swap two turns" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Next month" }).click();
   const cell = page
-    .locator(
-      page.viewportSize()!.width <= 760 ? ".schedule-list" : ".schedule-table",
-    )
-    .getByRole("button", { name: /Reassign Trash, Fri, Sep 18/ });
+    .getByRole("button", { name: /Reassign Trash, Fri, Sep 18/ })
+    .first();
   await cell.click();
   await expect(
     page.getByRole("dialog", { name: "Reassign Trash" }),
   ).toContainText("Fri, Sep 18 – Thu, Sep 24");
   await page.getByRole("button", { name: "Close dialog" }).click();
-
-  if (page.viewportSize()!.width > 760) {
-    const widths = await page
-      .locator(".schedule-table tbody tr")
-      .first()
-      .locator(":scope > th, :scope > td")
-      .evaluateAll((cells) =>
-        cells.map((cell) => cell.getBoundingClientRect().width),
-      );
-    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(3);
-  }
 });
 
 test("two-step reassign submits exact one-time and optional balanced-swap payloads", async ({
@@ -453,36 +451,23 @@ test("assignment, household, and history states keep chore periods attached", as
   await expect(page.locator("main")).toContainText("Fri, Sep 18 – Thu, Sep 24");
 
   await page.goto("/?view=household");
-  await expect(page.locator("main")).toContainText("Fri, Aug 28 – Thu, Sep 3");
-  await expect(page.locator("main")).toContainText("Mon, Aug 31 – Sun, Sep 6");
   await expect(
-    page.locator('th[scope="col"]', { hasText: "Period" }),
-  ).toBeAttached();
+    page
+      .getByRole("button", {
+        name: /Reassign Trash, Fri, Aug 28 – Thu, Sep 3/,
+      })
+      .first(),
+  ).toBeVisible();
   await expect(
-    page.locator('th[scope="col"]', { hasText: "Assignment" }),
-  ).toHaveCount(0);
-  const rowCellHeights = await page
-    .locator(".schedule-table tbody tr")
-    .first()
-    .locator(":scope > th, :scope > td")
-    .evaluateAll((cells) =>
-      cells.map((cell) => cell.getBoundingClientRect().height),
-    );
-  expect(new Set(rowCellHeights).size).toBe(1);
+    page.getByRole("button", {
+      name: /Reassign Dishwasher, Mon, Aug 31 – Sun, Sep 6/,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('time[datetime="2026-08-31"]')).toHaveAttribute(
+    "aria-current",
+    "date",
+  );
   await expect(page.locator("main")).not.toContainText(/Turn 1|Dates by chore/);
-
-  const periodStarts = await page
-    .locator("[data-period-start]")
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-period-start")),
-    );
-  const firstSequence = [...new Set(periodStarts)];
-  expect(firstSequence.slice(0, 4)).toEqual([
-    "2026-08-28",
-    "2026-08-31",
-    "2026-09-04",
-    "2026-09-07",
-  ]);
 
   await page.goto("/?view=history");
   await expect(page.locator("main")).toContainText("Fri, Aug 28 – Thu, Sep 3");
@@ -510,27 +495,28 @@ test("mini calendars expose active ownership dates and the local today marker", 
   ).toHaveCount(14);
 });
 
-test("household range is URL-backed and All time includes server-provided past data", async ({
+test("household calendar moves between months without navigation", async ({
   page,
 }) => {
-  await page.goto("/?view=household&range=upcoming");
-  await expect(page.getByRole("link", { name: "Upcoming" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page.locator("main")).not.toContainText("Fri, Aug 14");
+  await page.goto("/?view=household");
+  await expect(
+    page.getByRole("heading", { name: "August 2026" }),
+  ).toBeVisible();
+  await expect(page.getByText("Assigned turns")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Reassign Trash.*Aug 14/ }).first(),
+  ).toBeVisible();
 
-  await page.getByRole("link", { name: "All time" }).click();
-  await expect(page.getByRole("link", { name: "All time" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page).toHaveURL(/view=household&range=all/);
-  await expect(page.locator("main")).toContainText("Fri, Aug 14 – Thu, Aug 20");
-  await expect(page.getByText("Turns in All time")).toBeVisible();
-  await page.goBack();
-  await expect(page).toHaveURL(/range=upcoming/);
-  await expect(page.getByText(/Turns in/)).toHaveCount(0);
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(
+    page.getByRole("heading", { name: "September 2026" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL("/?view=household");
+
+  await page.getByRole("button", { name: "Previous month" }).click();
+  await expect(
+    page.getByRole("heading", { name: "August 2026" }),
+  ).toBeVisible();
 });
 
 test("visible reminder states do not expose contact or provider data", async ({
@@ -541,27 +527,27 @@ test("visible reminder states do not expose contact or provider data", async ({
   await expect(main).toContainText("Evening reminder accepted for sending");
   await expect(main).toContainText("Reminder delivery unconfirmed");
   await expect(main).toContainText("Reminder correction needed");
+  await expect(main).not.toContainText("reminder planned");
   await expect(main).not.toContainText(/Textbelt|textId|quota|phone/i);
 });
 
-test("the chronological household schedule reflows at 320px", async ({
-  page,
-}) => {
+test("the household month calendar fits at 320px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto("/?view=household");
-  await expect(page.locator(".schedule-list")).toBeVisible();
-  await expect(page.locator(".schedule-table-wrap")).toBeHidden();
-  await expect(page.locator("main")).toContainText("Fri, Aug 28 – Thu, Sep 3");
-  await expect(page.locator("main")).toContainText("Mon, Aug 31 – Sun, Sep 6");
+  await expect(page.locator(".month-calendar")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "August 2026" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Previous month" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next month" })).toBeVisible();
   const fit = await page.evaluate(() => ({
     documentWidth: document.documentElement.scrollWidth,
     viewportWidth: document.documentElement.clientWidth,
   }));
   expect(fit.documentWidth).toBeLessThanOrEqual(fit.viewportWidth);
   await expect(page.locator("select")).toHaveCount(0);
-  for (const dropdown of await page.locator(".custom-dropdown-trigger").all()) {
-    expect((await dropdown.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  }
 });
 
 test("history hides internal IDs and fits at 320px", async ({ page }) => {
