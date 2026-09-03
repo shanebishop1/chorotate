@@ -316,7 +316,7 @@ describe("Chore Relay integrated rendering", () => {
     expect(unauthorized).not.toContain("ChoRotate views");
     expect(unauthorized).toContain('aria-live="polite"');
     const unavailable = render("now", "unavailable");
-    expect(unavailable).toContain("Schedule temporarily unavailable");
+    expect(unavailable).toContain("No schedule found");
     expect(unavailable).not.toContain("Take the trash");
   });
 

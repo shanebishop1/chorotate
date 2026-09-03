@@ -1441,8 +1441,8 @@ function SystemState({
           ]
         : [
             "cloud",
-            "Schedule temporarily unavailable",
-            "No household details were exposed. Try again in a moment.",
+            "No schedule found",
+            "We couldn't load the schedule. Try again in a moment.",
           ];
   return (
     <div
