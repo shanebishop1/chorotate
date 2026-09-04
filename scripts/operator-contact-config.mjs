@@ -10,8 +10,9 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const expectedMemberIds = ["member-a", "member-b", "member-c", "member-d"];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const memberIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const maximumRosterSize = 50;
 const e164Pattern = /^\+[1-9]\d{1,14}$/;
 const consentStatuses = new Set(["not_recorded", "consented", "revoked"]);
 const suppressionStatuses = new Set(["not_suppressed", "suppressed"]);
@@ -37,10 +38,18 @@ export function validateContactInput(input) {
   const document = /** @type {Record<string, unknown>} */ (input);
   const documentKeys = Object.keys(document).sort();
   if (
-    documentKeys.join(",") !== "householdId,members,recordedAt" ||
+    documentKeys.join(",") !== "householdId,householdName,members,recordedAt" ||
     document.householdId !== "chorotate"
   ) {
     failures.push("document contract");
+  }
+  if (
+    typeof document.householdName !== "string" ||
+    document.householdName !== document.householdName.trim() ||
+    document.householdName.length === 0 ||
+    document.householdName.length > 100
+  ) {
+    failures.push("household name");
   }
   if (
     typeof document.recordedAt !== "string" ||
@@ -57,7 +66,11 @@ export function validateContactInput(input) {
 
   const members = Array.isArray(document.members) ? document.members : [];
   const emails = new Set();
-  const ids = [];
+  const ids = new Set();
+  const displayNames = new Set();
+  if (members.length === 0 || members.length > maximumRosterSize) {
+    failures.push("bounded member list");
+  }
   for (const candidate of members) {
     if (
       candidate === null ||
@@ -70,17 +83,37 @@ export function validateContactInput(input) {
     const member = /** @type {Record<string, unknown>} */ (candidate);
     if (
       Object.keys(member).sort().join(",") !==
-      "consent,email,id,phoneE164,suppression"
+      "consent,displayName,email,id,phoneE164,suppression"
     ) {
       failures.push("member fields");
     }
-    if (typeof member.id === "string") ids.push(member.id);
-    else failures.push("member id");
+    if (
+      typeof member.id !== "string" ||
+      member.id.length > 64 ||
+      !memberIdPattern.test(member.id) ||
+      ids.has(member.id)
+    ) {
+      failures.push("unique safe member id");
+    } else {
+      ids.add(member.id);
+    }
+    if (
+      typeof member.displayName !== "string" ||
+      member.displayName !== member.displayName.trim() ||
+      member.displayName.length === 0 ||
+      member.displayName.length > 100 ||
+      displayNames.has(member.displayName)
+    ) {
+      failures.push("unique trimmed display name");
+    } else {
+      displayNames.add(member.displayName);
+    }
 
     if (
       typeof member.email !== "string" ||
       member.email !== member.email.trim().toLowerCase() ||
       !emailPattern.test(member.email) ||
+      member.email.length > 254 ||
       member.email.endsWith(".invalid") ||
       member.email.includes("*") ||
       emails.has(member.email)
@@ -109,19 +142,12 @@ export function validateContactInput(input) {
       failures.push("suppression state");
     }
   }
-  if (
-    ids.length !== expectedMemberIds.length ||
-    [...ids].sort().join(",") !== [...expectedMemberIds].sort().join(",") ||
-    new Set(ids).size !== ids.length
-  ) {
-    failures.push("exact member set");
-  }
   if (failures.length > 0) {
     throw new Error(
       `Invalid operator contact input: ${[...new Set(failures)].sort().join(", ")}`,
     );
   }
-  return /** @type {{householdId: string, recordedAt: string, members: Array<{id: string, email: string, phoneE164: string | null, consent: string, suppression: string}>}} */ (
+  return /** @type {{householdId: string, householdName: string, recordedAt: string, members: Array<{id: string, displayName: string, email: string, phoneE164: string | null, consent: string, suppression: string}>}} */ (
     input
   );
 }
@@ -154,16 +180,20 @@ export function summarizeContactReadiness(input) {
 const sqlString = (value) => `'${value.replaceAll("'", "''")}'`;
 
 /** @param {ReturnType<typeof validateContactInput>} input */
-export function buildContactSql(input) {
-  const members = [...input.members].sort(
-    (left, right) =>
-      expectedMemberIds.indexOf(left.id) - expectedMemberIds.indexOf(right.id),
-  );
+function buildContactSqlTemplate(input) {
+  const members = input.members;
+  const memberCount = members.length;
   const ids = members.map((member) => sqlString(member.id)).join(", ");
   const emailCases = members
     .map(
       (member) =>
         `    WHEN ${sqlString(member.id)} THEN ${sqlString(member.email)}`,
+    )
+    .join("\n");
+  const displayNameCases = members
+    .map(
+      (member) =>
+        `    WHEN ${sqlString(member.id)} THEN ${sqlString(member.displayName)}`,
     )
     .join("\n");
   /** @param {"phoneE164" | "consent" | "suppression"} field */
@@ -175,7 +205,16 @@ export function buildContactSql(input) {
       })
       .join("\n");
 
-  return `-- PRIVATE OPERATOR INPUT. Contains sensitive contact data. Do not commit or log.\nPRAGMA foreign_keys = ON;\nCREATE TABLE operator_identity_assert (matched_rows INTEGER CHECK (matched_rows = 4));\n-- An exact-email change invalidates the old authorization binding and sessions.\nDELETE FROM "session"\nWHERE "userId" IN (\n  SELECT auth_user_id\n  FROM allowlisted_identities\n  WHERE household_id = ${sqlString(input.householdId)}\n    AND member_id IN (${ids})\n    AND auth_user_id IS NOT NULL\n    AND email_normalized <> CASE member_id\n${emailCases}\n      END\n);\nUPDATE allowlisted_identities\nSET auth_user_id = CASE\n      WHEN email_normalized <> CASE member_id\n${emailCases}\n        END THEN NULL\n      ELSE auth_user_id\n    END,\n    email_normalized = CASE member_id\n${emailCases}\n  END\nWHERE household_id = ${sqlString(input.householdId)} AND member_id IN (${ids});\nINSERT INTO operator_identity_assert VALUES (changes());\nCREATE TABLE operator_contact_assert (matched_rows INTEGER CHECK (matched_rows = 4));\nUPDATE members\nSET sms_phone_e164 = CASE id\n${memberCases("phoneE164")}\n  END,\n    sms_consent_status = CASE id\n${memberCases("consent")}\n  END,\n    sms_suppression_status = CASE id\n${memberCases("suppression")}\n  END,\n    sms_contact_updated_at = ${sqlString(input.recordedAt)}\nWHERE household_id = ${sqlString(input.householdId)} AND id IN (${ids});\nINSERT INTO operator_contact_assert VALUES (changes());\nDROP TABLE operator_contact_assert;\nDROP TABLE operator_identity_assert;\n`;
+  return `-- PRIVATE OPERATOR INPUT. Contains sensitive contact data. Do not commit or log.\nPRAGMA foreign_keys = ON;\nCREATE TABLE operator_identity_assert (matched_rows INTEGER CHECK (matched_rows = ${memberCount}));\nINSERT INTO operator_identity_assert SELECT count(*) FROM allowlisted_identities WHERE household_id = ${sqlString(input.householdId)};\n-- An exact-email change invalidates the old authorization binding and sessions.\nDELETE FROM "session"\nWHERE "userId" IN (\n  SELECT auth_user_id\n  FROM allowlisted_identities\n  WHERE household_id = ${sqlString(input.householdId)}\n    AND member_id IN (${ids})\n    AND auth_user_id IS NOT NULL\n    AND email_normalized <> CASE member_id\n${emailCases}\n      END\n);\nUPDATE allowlisted_identities\nSET auth_user_id = CASE\n      WHEN email_normalized <> CASE member_id\n${emailCases}\n        END THEN NULL\n      ELSE auth_user_id\n    END,\n    email_normalized = CASE member_id\n${emailCases}\n  END\nWHERE household_id = ${sqlString(input.householdId)} AND member_id IN (${ids});\nINSERT INTO operator_identity_assert VALUES (changes());\nCREATE TABLE operator_contact_assert (matched_rows INTEGER CHECK (matched_rows = ${memberCount}));\nINSERT INTO operator_contact_assert SELECT count(*) FROM members WHERE household_id = ${sqlString(input.householdId)};\nUPDATE members\nSET display_name = CASE id\n${displayNameCases}\n  END,\n    sms_phone_e164 = CASE id\n${memberCases("phoneE164")}\n  END,\n    sms_consent_status = CASE id\n${memberCases("consent")}\n  END,\n    sms_suppression_status = CASE id\n${memberCases("suppression")}\n  END,\n    sms_contact_updated_at = ${sqlString(input.recordedAt)}\nWHERE household_id = ${sqlString(input.householdId)} AND id IN (${ids});\nINSERT INTO operator_contact_assert VALUES (changes());\nDROP TABLE operator_contact_assert;\nDROP TABLE operator_identity_assert;\n`;
+}
+
+/** @param {ReturnType<typeof validateContactInput>} input */
+export function buildContactSql(input) {
+  const identityDistinctAssertion = `INSERT INTO operator_identity_assert SELECT count(DISTINCT member_id) FROM allowlisted_identities WHERE household_id = ${sqlString(input.householdId)};`;
+  return buildContactSqlTemplate(input).replace(
+    "-- An exact-email change",
+    `${identityDistinctAssertion}\n-- An exact-email change`,
+  );
 }
 
 /**
@@ -236,22 +275,13 @@ function validateBootstrapSettings(settings) {
  * @param {ReturnType<typeof validateContactInput>} input
  * @param {unknown} settings
  */
-export function buildBootstrapSql(input, settings) {
+function buildBootstrapSqlTemplate(input, settings) {
   const bootstrap = validateBootstrapSettings(settings);
-  const members = [...input.members].sort(
-    (left, right) =>
-      expectedMemberIds.indexOf(left.id) - expectedMemberIds.indexOf(right.id),
-  );
-  const displayNames = new Map([
-    ["member-a", "Member A"],
-    ["member-b", "Member B"],
-    ["member-c", "Member C"],
-    ["member-d", "Member D"],
-  ]);
+  const members = input.members;
   const memberRows = members
     .map(
       (member) =>
-        `  (${sqlString(member.id)}, ${sqlString(input.householdId)}, ${sqlString(displayNames.get(member.id) ?? member.id)}, 1, ${sqlString(input.recordedAt)}, ${member.phoneE164 === null ? "NULL" : sqlString(member.phoneE164)}, ${sqlString(member.consent)}, ${sqlString(member.suppression)}, ${sqlString(input.recordedAt)})`,
+        `  (${sqlString(member.id)}, ${sqlString(input.householdId)}, ${sqlString(member.displayName)}, 1, ${sqlString(input.recordedAt)}, ${member.phoneE164 === null ? "NULL" : sqlString(member.phoneE164)}, ${sqlString(member.consent)}, ${sqlString(member.suppression)}, ${sqlString(input.recordedAt)})`,
     )
     .join(",\n");
   const identityRows = members
@@ -261,17 +291,28 @@ export function buildBootstrapSql(input, settings) {
     )
     .join(",\n");
   const rotationMemberRows = [
-    ...expectedMemberIds.map(
-      (memberId, position) =>
-        `  (${sqlString(input.householdId)}, 'rotation-trash-2026-08-28', ${sqlString(memberId)}, ${position})`,
+    ...members.map(
+      (member, position) =>
+        `  (${sqlString(input.householdId)}, 'rotation-trash-2026-08-28', ${sqlString(member.id)}, ${position})`,
     ),
-    ...expectedMemberIds.map(
-      (memberId, position) =>
-        `  (${sqlString(input.householdId)}, 'rotation-dishwasher-2026-08-31', ${sqlString(memberId)}, ${position})`,
+    ...members.map(
+      (member, position) =>
+        `  (${sqlString(input.householdId)}, 'rotation-dishwasher-2026-08-31', ${sqlString(member.id)}, ${position})`,
     ),
   ].join(",\n");
 
   return `-- PRIVATE OPERATOR INPUT. Contains sensitive identity/contact data. Do not commit or log.\n-- First-run only: refuses any pre-existing ChoRotate production structure.\nPRAGMA foreign_keys = ON;\nCREATE TABLE operator_bootstrap_assert (existing_rows INTEGER CHECK (existing_rows = 0));\nINSERT INTO operator_bootstrap_assert\nSELECT\n+  (SELECT count(*) FROM households WHERE id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM members WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM allowlisted_identities WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM chores WHERE household_id = ${sqlString(input.householdId)})\n+  (SELECT count(*) FROM rotation_configs WHERE household_id = ${sqlString(input.householdId)});\nINSERT INTO households\n  (id,name,time_zone,week_start,created_at,reminder_evening_local_time,reminder_morning_local_time)\nVALUES\n  (${sqlString(input.householdId)}, 'ChoRotate', ${sqlString(bootstrap.timeZone)}, ${bootstrap.weekStartNumber}, ${sqlString(input.recordedAt)}, ${sqlString(bootstrap.eveningTime)}, ${sqlString(bootstrap.morningTime)});\nINSERT INTO members\n  (id,household_id,display_name,active,created_at,sms_phone_e164,sms_consent_status,sms_suppression_status,sms_contact_updated_at)\nVALUES\n${memberRows};\nINSERT INTO allowlisted_identities\n  (id,household_id,member_id,email_normalized,auth_user_id,active,created_at)\nVALUES\n${identityRows};\nINSERT INTO chores\n  (id,household_id,name,active,created_at,instructions,ownership_start_weekday)\nVALUES\n  ('trash', ${sqlString(input.householdId)}, 'Trash', 1, ${sqlString(input.recordedAt)}, 'Take the trash out and replace bags.', 5),\n  ('dishwasher', ${sqlString(input.householdId)}, 'Dishwasher', 1, ${sqlString(input.recordedAt)}, 'Empty the completed dishwasher.', 1);\nINSERT INTO rotation_configs\n  (id,household_id,chore_id,effective_from,rotation_offset,created_at)\nVALUES\n  ('rotation-trash-2026-08-28', ${sqlString(input.householdId)}, 'trash', '2026-08-28', 0, ${sqlString(input.recordedAt)}),\n  ('rotation-dishwasher-2026-08-31', ${sqlString(input.householdId)}, 'dishwasher', '2026-08-31', 2, ${sqlString(input.recordedAt)});\nINSERT INTO rotation_config_members\n  (household_id,rotation_config_id,member_id,position)\nVALUES\n${rotationMemberRows};\nDROP TABLE operator_bootstrap_assert;\n`;
+}
+
+/**
+ * @param {ReturnType<typeof validateContactInput>} input
+ * @param {unknown} settings
+ */
+export function buildBootstrapSql(input, settings) {
+  return buildBootstrapSqlTemplate(input, settings).replace(
+    `(${sqlString(input.householdId)}, 'ChoRotate',`,
+    `(${sqlString(input.householdId)}, ${sqlString(input.householdName)},`,
+  );
 }
 
 /** @param {string} path */
@@ -282,6 +323,22 @@ function outsideRepository(path) {
     relation === ".." ||
     relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
   );
+}
+
+/** @param {string} path */
+function inLocalPrivateDirectory(path) {
+  const relation = relative(join(repositoryRoot, ".chorotate"), resolve(path));
+  return (
+    relation === "" ||
+    (!isAbsolute(relation) &&
+      relation !== ".." &&
+      !relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`))
+  );
+}
+
+/** @param {string} path */
+function allowedPrivatePath(path) {
+  return outsideRepository(path) || inLocalPrivateDirectory(path);
 }
 
 async function main() {
@@ -323,14 +380,14 @@ async function main() {
   const inputPath = await realpath(resolve(args[inputIndex + 1]));
   const outputParent = await realpath(dirname(resolve(args[outputIndex + 1])));
   const outputPath = join(outputParent, basename(args[outputIndex + 1]));
-  if (!outsideRepository(inputPath) || !outsideRepository(outputPath)) {
+  if (!allowedPrivatePath(inputPath) || !allowedPrivatePath(outputPath)) {
     throw new Error(
-      "Operator input and output paths must be outside the repository",
+      "Operator input and output paths must be outside the repository or under .chorotate",
     );
   }
   const inputStat = await stat(inputPath);
-  if ((inputStat.mode & 0o077) !== 0) {
-    throw new Error("Operator input must not grant group or other permissions");
+  if (!inputStat.isFile() || (inputStat.mode & 0o777) !== 0o600) {
+    throw new Error("Operator input must be a regular file with mode 0600");
   }
   const input = validateContactInput(
     JSON.parse(await readFile(inputPath, "utf8")),
@@ -349,6 +406,7 @@ async function main() {
     0o600,
   );
   try {
+    await output.chmod(0o600);
     await output.writeFile(sql, "utf8");
   } finally {
     await output.close();

@@ -182,10 +182,10 @@ test("profile control uses an available Google image and hides account actions",
     "src",
     "https://lh3.googleusercontent.com/a/profile-photo",
   );
-  const shanePeople = page.locator(".person-member-d");
-  expect(await shanePeople.count()).toBeGreaterThan(1);
-  await expect(shanePeople.locator("img")).toHaveCount(
-    await shanePeople.count(),
+  const memberDPeople = page.locator(".person-tone-1");
+  expect(await memberDPeople.count()).toBeGreaterThan(1);
+  await expect(memberDPeople.locator("img")).toHaveCount(
+    await memberDPeople.count(),
   );
   await expect(page.getByRole("button", { name: "Sign out" })).toBeHidden();
   const centering = await profile.evaluate((button) => {

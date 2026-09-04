@@ -23,6 +23,7 @@ const localTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 export const productionD1SettingNames = [
   "PRODUCTION_HOUSEHOLD_TIME_ZONE",
   "PRODUCTION_HOUSEHOLD_WEEK_START",
+  "PRODUCTION_HOUSEHOLD_MEMBER_COUNT",
   "PRODUCTION_REMINDER_EVENING_LOCAL_TIME",
   "PRODUCTION_REMINDER_MORNING_LOCAL_TIME",
 ];
@@ -32,7 +33,7 @@ const sqlString = (value) => `'${value.replaceAll("'", "''")}'`;
 
 /**
  * @param {unknown} input
- * @returns {{timeZone: string, weekStart: string, weekStartNumber: number, eveningTime: string, morningTime: string}}
+ * @returns {{timeZone: string, weekStart: string, weekStartNumber: number, eveningTime: string, morningTime: string, memberCount: number}}
  */
 function validateSettings(input) {
   /** @type {string[]} */
@@ -45,6 +46,7 @@ function validateSettings(input) {
   const weekStart = settings.weekStart;
   const eveningTime = settings.eveningTime;
   const morningTime = settings.morningTime;
+  const memberCount = settings.memberCount;
   if (
     typeof timeZone !== "string" ||
     timeZone !== timeZone.trim() ||
@@ -68,6 +70,14 @@ function validateSettings(input) {
   if (typeof morningTime !== "string" || !localTimePattern.test(morningTime)) {
     failures.push("PRODUCTION_REMINDER_MORNING_LOCAL_TIME");
   }
+  if (
+    typeof memberCount !== "number" ||
+    !Number.isInteger(memberCount) ||
+    memberCount < 1 ||
+    memberCount > 50
+  ) {
+    failures.push("PRODUCTION_HOUSEHOLD_MEMBER_COUNT");
+  }
   if (failures.length > 0) {
     throw new Error(
       `Invalid production D1 verification settings: ${[...new Set(failures)].sort().join(", ")}`,
@@ -81,16 +91,22 @@ function validateSettings(input) {
     ),
     eveningTime: /** @type {string} */ (eveningTime),
     morningTime: /** @type {string} */ (morningTime),
+    memberCount: /** @type {number} */ (memberCount),
   };
 }
 
 /** @param {NodeJS.ProcessEnv | Record<string, string | undefined>} environment */
 export function productionD1SettingsFromEnvironment(environment) {
+  const memberCountValue = environment.PRODUCTION_HOUSEHOLD_MEMBER_COUNT;
   return validateSettings({
     timeZone: environment.PRODUCTION_HOUSEHOLD_TIME_ZONE,
     weekStart: environment.PRODUCTION_HOUSEHOLD_WEEK_START,
     eveningTime: environment.PRODUCTION_REMINDER_EVENING_LOCAL_TIME,
     morningTime: environment.PRODUCTION_REMINDER_MORNING_LOCAL_TIME,
+    memberCount:
+      typeof memberCountValue === "string" && /^\d+$/.test(memberCountValue)
+        ? Number(memberCountValue)
+        : undefined,
   });
 }
 
@@ -103,7 +119,8 @@ SELECT
   (SELECT count(*) FROM households) AS households,
   (SELECT count(*) FROM households
     WHERE id = 'chorotate'
-      AND name = 'ChoRotate'
+      AND name = trim(name)
+      AND name <> ''
       AND time_zone = ${sqlString(settings.timeZone)}
       AND week_start = ${settings.weekStartNumber}
       AND reminder_evening_local_time = ${sqlString(settings.eveningTime)}
@@ -111,28 +128,26 @@ SELECT
   (SELECT count(*) FROM members) AS members,
   (SELECT count(*) FROM members WHERE active = 1) AS active_members,
   (SELECT count(*) FROM members
-    WHERE household_id = 'chorotate' AND active = 1
-      AND id IN ('member-a', 'member-b', 'member-c', 'member-d')) AS exact_active_members,
+    WHERE household_id = 'chorotate' AND active = 1) AS exact_active_members,
   (SELECT count(*) FROM members
-    WHERE household_id = 'chorotate' AND (
-      (id = 'member-a' AND display_name = 'Member A') OR
-      (id = 'member-b' AND display_name = 'Member B') OR
-      (id = 'member-c' AND display_name = 'Member C') OR
-      (id = 'member-d' AND display_name = 'Member D')
-    )) AS exact_member_profiles,
+    WHERE household_id = 'chorotate' AND active = 1
+      AND id = trim(id) AND id <> ''
+      AND display_name = trim(display_name) AND display_name <> '') AS exact_member_profiles,
   (SELECT count(*) FROM allowlisted_identities) AS identities,
   (SELECT count(*) FROM allowlisted_identities WHERE active = 1) AS active_identities,
   (SELECT count(*) FROM allowlisted_identities
-    WHERE household_id = 'chorotate' AND active = 1 AND (
-      (id = 'identity-member-a' AND member_id = 'member-a') OR
-      (id = 'identity-member-b' AND member_id = 'member-b') OR
-      (id = 'identity-member-c' AND member_id = 'member-c') OR
-      (id = 'identity-member-d' AND member_id = 'member-d')
-    )) AS exact_active_identities,
-  (SELECT count(DISTINCT member_id) FROM allowlisted_identities
-    WHERE active = 1
-      AND household_id = 'chorotate'
-      AND member_id IN ('member-a', 'member-b', 'member-c', 'member-d')) AS exact_identity_members,
+    JOIN members
+      ON members.household_id = allowlisted_identities.household_id
+     AND members.id = allowlisted_identities.member_id
+    WHERE allowlisted_identities.household_id = 'chorotate'
+      AND allowlisted_identities.active = 1
+      AND members.active = 1) AS exact_active_identities,
+  (SELECT count(*) FROM members
+    WHERE members.household_id = 'chorotate' AND members.active = 1
+      AND 1 = (SELECT count(*) FROM allowlisted_identities
+        WHERE allowlisted_identities.household_id = members.household_id
+          AND allowlisted_identities.member_id = members.id
+          AND allowlisted_identities.active = 1)) AS exact_identity_members,
   (SELECT count(*) FROM allowlisted_identities
     WHERE active = 1 AND (
       email_normalized <> lower(trim(email_normalized)) OR
@@ -176,21 +191,24 @@ SELECT
     )) AS expected_rotation_configs,
   (SELECT count(*) FROM rotation_config_members
     WHERE household_id = 'chorotate') AS rotation_members,
-  (SELECT count(*) FROM rotation_config_members
-    WHERE household_id = 'chorotate' AND (
-      (rotation_config_id = 'rotation-trash-2026-08-28' AND (
-        (member_id = 'member-a' AND position = 0) OR
-        (member_id = 'member-b' AND position = 1) OR
-        (member_id = 'member-c' AND position = 2) OR
-        (member_id = 'member-d' AND position = 3)
-      )) OR
-      (rotation_config_id = 'rotation-dishwasher-2026-08-31' AND (
-        (member_id = 'member-a' AND position = 0) OR
-        (member_id = 'member-b' AND position = 1) OR
-        (member_id = 'member-c' AND position = 2) OR
-        (member_id = 'member-d' AND position = 3)
-      ))
-    )) AS expected_rotation_members,
+  (SELECT count(*) FROM (
+    SELECT rotation_config_members.rotation_config_id
+    FROM rotation_config_members
+    JOIN members
+      ON members.household_id = rotation_config_members.household_id
+     AND members.id = rotation_config_members.member_id
+     AND members.active = 1
+    WHERE rotation_config_members.household_id = 'chorotate'
+      AND rotation_config_members.rotation_config_id IN (
+        'rotation-trash-2026-08-28', 'rotation-dishwasher-2026-08-31'
+      )
+    GROUP BY rotation_config_members.rotation_config_id
+    HAVING count(*) = ${settings.memberCount}
+      AND count(DISTINCT rotation_config_members.member_id) = ${settings.memberCount}
+      AND count(DISTINCT rotation_config_members.position) = ${settings.memberCount}
+      AND min(rotation_config_members.position) = 0
+      AND max(rotation_config_members.position) = ${settings.memberCount - 1}
+  )) AS expected_rotation_members,
   (SELECT count(*) FROM (
     SELECT household_id, assignment_id, assignment_version, local_period_start,
       chore_id, occurrence_phase, recipient_member_id
@@ -202,32 +220,40 @@ SELECT
 `;
 }
 
-export const expectedProductionD1Result = {
-  migrations: expectedMigrations,
-  households: 1,
-  exact_household_configuration: 1,
-  members: 4,
-  active_members: 4,
-  exact_active_members: 4,
-  exact_member_profiles: 4,
-  identities: 4,
-  active_identities: 4,
-  exact_active_identities: 4,
-  exact_identity_members: 4,
-  invalid_identities: 0,
-  missing_contacts: 0,
-  malformed_contacts: 0,
-  unconsented_contacts: 0,
-  suppressed_contacts: 0,
-  chores: 2,
-  active_chores: 2,
-  expected_chores: 2,
-  rotation_configs: 2,
-  expected_rotation_configs: 2,
-  rotation_members: 8,
-  expected_rotation_members: 8,
-  duplicate_occurrences: 0,
-};
+/** @param {number} memberCount */
+export function expectedProductionD1Result(memberCount) {
+  if (!Number.isInteger(memberCount) || memberCount < 1 || memberCount > 50) {
+    throw new Error("Invalid expected production household member count");
+  }
+  return {
+    migrations: expectedMigrations,
+    households: 1,
+    exact_household_configuration: 1,
+    members: memberCount,
+    active_members: memberCount,
+    exact_active_members: memberCount,
+    exact_member_profiles: memberCount,
+    identities: memberCount,
+    active_identities: memberCount,
+    exact_active_identities: memberCount,
+    exact_identity_members: memberCount,
+    invalid_identities: 0,
+    missing_contacts: 0,
+    malformed_contacts: 0,
+    unconsented_contacts: 0,
+    suppressed_contacts: 0,
+    chores: 2,
+    active_chores: 2,
+    expected_chores: 2,
+    rotation_configs: 2,
+    expected_rotation_configs: 2,
+    rotation_members: memberCount * 2,
+    expected_rotation_members: 2,
+    duplicate_occurrences: 0,
+  };
+}
+
+const productionD1ResultNames = Object.keys(expectedProductionD1Result(1));
 
 /** @param {string} output */
 export function parseProductionD1VerificationOutput(output) {
@@ -246,9 +272,7 @@ export function parseProductionD1VerificationOutput(output) {
     if (
       row !== null &&
       typeof row === "object" &&
-      Object.keys(expectedProductionD1Result).every((name) =>
-        Object.hasOwn(row, name),
-      )
+      productionD1ResultNames.every((name) => Object.hasOwn(row, name))
     ) {
       return /** @type {Record<string, unknown>} */ (row);
     }

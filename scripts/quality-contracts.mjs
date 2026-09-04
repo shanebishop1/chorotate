@@ -208,9 +208,11 @@ const operatorContactTool = read("scripts/operator-contact-config.mjs");
 const remoteD1Verification = `${read("scripts/verify-production-d1.mjs")}\n${read("scripts/production-d1-contract.mjs")}\n${read("scripts/production-d1-wrangler.mjs")}`;
 const scheduledReminders = read("app/domain/reminders/scheduled.ts");
 check(
-  "operator contact preparation keeps private files outside the repository",
-  /outsideRepository\(inputPath\)/.test(operatorContactTool) &&
-    /outsideRepository\(outputPath\)/.test(operatorContactTool) &&
+  "operator contact preparation restricts private files to safe locations",
+  /allowedPrivatePath\(inputPath\)/.test(operatorContactTool) &&
+    /allowedPrivatePath\(outputPath\)/.test(operatorContactTool) &&
+    /inLocalPrivateDirectory/.test(operatorContactTool) &&
+    read(".gitignore").includes(".chorotate/") &&
     /O_EXCL/.test(operatorContactTool) &&
     /0o600/.test(operatorContactTool),
 );
@@ -252,7 +254,11 @@ check(
     /exact_active_members/.test(remoteD1Verification) &&
     /exact_identity_members/.test(remoteD1Verification) &&
     /expected_rotation_members/.test(remoteD1Verification) &&
-    /'member-a', 'member-b', 'member-c', 'member-d'/.test(remoteD1Verification) &&
+    /PRODUCTION_HOUSEHOLD_MEMBER_COUNT/.test(remoteD1Verification) &&
+    /count\(DISTINCT rotation_config_members\.position\)/.test(
+      remoteD1Verification,
+    ) &&
+    !/member-[abc]|Member [ABC]/.test(remoteD1Verification) &&
     /missing_contacts/.test(remoteD1Verification) &&
     /duplicate_occurrences/.test(remoteD1Verification) &&
     !/textbelt\.com\/text/.test(remoteD1Verification),

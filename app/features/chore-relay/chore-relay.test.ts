@@ -7,11 +7,13 @@ import type { ProjectedReminderStatus } from "../../domain/read-models";
 import { ChoreRelayShell, type ChoreRelayData } from "./chore-relay-shell";
 import { normalizeView, type ChoreRelayView } from "./model";
 
-const members = ["Member A", "Member B", "Member C", "Member D"].map((displayName) => ({
-  id: displayName.toLowerCase(),
-  displayName,
-  active: true,
-}));
+const members = ["Member A", "Member B", "Member C", "Member D"].map(
+  (displayName) => ({
+    id: displayName.toLowerCase().replace(" ", "-"),
+    displayName,
+    active: true,
+  }),
+);
 const periodStarts = {
   trash: ["2026-08-28", "2026-09-04", "2026-09-11", "2026-09-18"],
   dishwasher: ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21"],

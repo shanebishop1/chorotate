@@ -1607,7 +1607,7 @@ function initials(name: string): string {
   return name.trim().charAt(0).toUpperCase();
 }
 function cueClass(id: string): string {
-  const cues = ["member-a", "member-b", "member-c", "member-d"];
+  const cues = ["tone-0", "tone-1", "tone-2", "tone-3"];
   let total = 0;
   for (const char of id) total += char.charCodeAt(0);
   return cues[total % cues.length];

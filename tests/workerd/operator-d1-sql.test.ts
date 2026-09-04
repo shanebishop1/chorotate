@@ -66,7 +66,7 @@ describe("generated operator SQL on workerd D1", () => {
     await expect(assertionTables()).resolves.toEqual([]);
     await expect(
       d1().prepare("SELECT count(*) AS count FROM members").first(),
-    ).resolves.toEqual({ count: 4 });
+    ).resolves.toEqual({ count: 3 });
 
     await expect(
       executeAtomicFile(env.TEST_OPERATOR_BOOTSTRAP_SQL),
@@ -86,19 +86,19 @@ describe("generated operator SQL on workerd D1", () => {
         .first(),
     ).resolves.toEqual({
       households: 1,
-      members: 4,
-      identities: 4,
+      members: 3,
+      identities: 3,
       chores: 2,
       rotations: 2,
-      rotation_members: 8,
+      rotation_members: 6,
     });
   });
 
-  it("rolls exact-four assertion failures back without persistent schema", async () => {
+  it("rolls dynamic-cardinality assertion failures back without persistent schema", async () => {
     await executeAtomicFile(env.TEST_OPERATOR_BOOTSTRAP_SQL);
     await d1()
       .prepare("DELETE FROM allowlisted_identities WHERE member_id = ?")
-      .bind("member-d")
+      .bind("member-b")
       .run();
 
     await expect(
@@ -120,7 +120,7 @@ describe("generated operator SQL on workerd D1", () => {
         .first(),
     ).resolves.toEqual({
       email_normalized: "member-a@example.com",
-      sms_phone_e164: "+15550000000",
+      sms_phone_e164: "+15550000001",
     });
   });
 });

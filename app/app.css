@@ -820,42 +820,42 @@ h3 {
   display: none;
 }
 
-.person-member-a {
+.person-tone-0 {
   background: #f6deb0;
   color: #704600;
 }
 
-.person-member-b {
+.person-tone-1 {
   background: #cde8dc;
   color: #176247;
 }
 
-.person-member-c {
+.person-tone-2 {
   background: #d5e4f5;
   color: #285798;
 }
 
-.person-member-d {
+.person-tone-3 {
   background: #efd8e9;
   color: #7f316f;
 }
 
 @media (prefers-color-scheme: dark) {
-  .app-shell:not([data-theme]) .person-member-a {
+  .app-shell:not([data-theme]) .person-tone-0 {
     background: #46350f;
     color: #f2c76d;
   }
 }
 
-.app-shell[data-theme="dark"] .person-member-a { background: #46350f; color: #f2c76d; }
-.app-shell[data-theme="dark"] .person-member-b { background: #153a2f; color: #8bd7bb; }
-.app-shell[data-theme="dark"] .person-member-c { background: #1d3351; color: #a9cbed; }
-.app-shell[data-theme="dark"] .person-member-d { background: #42223d; color: #e8acdc; }
+.app-shell[data-theme="dark"] .person-tone-0 { background: #46350f; color: #f2c76d; }
+.app-shell[data-theme="dark"] .person-tone-1 { background: #153a2f; color: #8bd7bb; }
+.app-shell[data-theme="dark"] .person-tone-2 { background: #1d3351; color: #a9cbed; }
+.app-shell[data-theme="dark"] .person-tone-3 { background: #42223d; color: #e8acdc; }
 
 @media (prefers-color-scheme: dark) {
-  .app-shell:not([data-theme]) .person-member-b { background: #153a2f; color: #8bd7bb; }
-  .app-shell:not([data-theme]) .person-member-c { background: #1d3351; color: #a9cbed; }
-  .app-shell:not([data-theme]) .person-member-d { background: #42223d; color: #e8acdc; }
+  .app-shell:not([data-theme]) .person-tone-1 { background: #153a2f; color: #8bd7bb; }
+  .app-shell:not([data-theme]) .person-tone-2 { background: #1d3351; color: #a9cbed; }
+  .app-shell:not([data-theme]) .person-tone-3 { background: #42223d; color: #e8acdc; }
 }
 
 .handoff-strip {
@@ -3027,22 +3027,22 @@ html[data-theme="light"] .app-shell {
   --shadow-lg: 0 18px 60px rgb(17 19 16 / 25%);
 }
 
-html[data-theme="light"] .person-member-a {
+html[data-theme="light"] .person-tone-0 {
   background: #f7d994;
   color: #5c3a00;
 }
 
-html[data-theme="light"] .person-member-b {
+html[data-theme="light"] .person-tone-1 {
   background: #c6e9da;
   color: #0d573d;
 }
 
-html[data-theme="light"] .person-member-c {
+html[data-theme="light"] .person-tone-2 {
   background: #cfe2f8;
   color: #174f91;
 }
 
-html[data-theme="light"] .person-member-d {
+html[data-theme="light"] .person-tone-3 {
   background: #f0d3e9;
   color: #742761;
 }

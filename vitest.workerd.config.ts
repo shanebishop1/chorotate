@@ -10,9 +10,11 @@ import {
 const migrations = await readD1Migrations("./migrations");
 const operatorInput = validateContactInput({
   householdId: "chorotate",
+  householdName: "Test Household",
   recordedAt: "2026-09-01T00:00:00.000Z",
-  members: ["member-a", "member-b", "member-c", "member-d"].map((id, index) => ({
+  members: ["member-c", "member-a", "member-b"].map((id, index) => ({
     id,
+    displayName: `Member ${id.at(-1)?.toUpperCase()}`,
     email: `${id}@example.com`,
     phoneE164: `+1555000000${index}`,
     consent: "consented",

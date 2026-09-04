@@ -57,10 +57,12 @@ class PreparationD1 implements D1DatabaseLike {
       ];
     }
     if (sql.includes("FROM rotation_config_members")) {
-      return ["Member A", "Member B", "Member C", "Member D"].flatMap((memberId) => [
-        { config_id: "trash-config", member_id: memberId },
-        { config_id: "dishwasher-config", member_id: memberId },
-      ]);
+      return ["Member A", "Member B", "Member C", "Member D"].flatMap(
+        (memberId) => [
+          { config_id: "trash-config", member_id: memberId },
+          { config_id: "dishwasher-config", member_id: memberId },
+        ],
+      );
     }
     return [];
   }

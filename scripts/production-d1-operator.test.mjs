@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -19,6 +20,7 @@ import {
   buildProductionD1VerificationQuery,
   expectedProductionD1Result,
   parseProductionD1VerificationOutput,
+  productionD1SettingsFromEnvironment,
 } from "./production-d1-contract.mjs";
 import {
   buildProductionD1OperatorConfig,
@@ -31,6 +33,30 @@ import {
 
 const databaseId = "12345678-1234-4123-8123-123456789abc";
 
+test("requires a bounded expected production household member count", () => {
+  const base = {
+    PRODUCTION_HOUSEHOLD_TIME_ZONE: "America/New_York",
+    PRODUCTION_HOUSEHOLD_WEEK_START: "monday",
+    PRODUCTION_REMINDER_EVENING_LOCAL_TIME: "20:00",
+    PRODUCTION_REMINDER_MORNING_LOCAL_TIME: "08:00",
+  };
+  assert.equal(
+    productionD1SettingsFromEnvironment({
+      ...base,
+      PRODUCTION_HOUSEHOLD_MEMBER_COUNT: "3",
+    }).memberCount,
+    3,
+  );
+  for (const memberCount of [undefined, "0", "51", "3.5", "three"]) {
+    assert.throws(() =>
+      productionD1SettingsFromEnvironment({
+        ...base,
+        PRODUCTION_HOUSEHOLD_MEMBER_COUNT: memberCount,
+      }),
+    );
+  }
+});
+
 test("builds only fixed binding-based production D1 commands", () => {
   const configPath = "/private/wrangler.json";
   const sqlPath = "/private/bootstrap.sql";
@@ -39,7 +65,9 @@ test("builds only fixed binding-based production D1 commands", () => {
     weekStart: "monday",
     eveningTime: "20:00",
     morningTime: "08:00",
+    memberCount: 3,
   });
+  assert.doesNotMatch(verificationQuery, /member-[abc]|Member [ABC]/);
   assert.deepEqual(
     buildProductionD1WranglerArgs("migrations-list", { configPath }),
     ["d1", "migrations", "list", "DB", "--remote", "--config", configPath],
@@ -132,8 +160,9 @@ test("validates the injected id and keeps it only in the temporary config", asyn
 });
 
 test("accepts clean command JSON and rejects file-import result shapes", () => {
+  const expectedResult = expectedProductionD1Result(3);
   const commandOutput = JSON.stringify([
-    { results: [expectedProductionD1Result], success: true },
+    { results: [expectedResult], success: true },
   ]);
   const importOutput = JSON.stringify([
     {
@@ -150,14 +179,12 @@ test("accepts clean command JSON and rejects file-import result shapes", () => {
 
   assert.deepEqual(
     parseProductionD1VerificationOutput(commandOutput),
-    expectedProductionD1Result,
+    expectedResult,
   );
   assert.equal(parseProductionD1VerificationOutput(importOutput), undefined);
   assert.equal(
     parseProductionD1VerificationOutput(
-      JSON.stringify([
-        { results: [expectedProductionD1Result], success: false },
-      ]),
+      JSON.stringify([{ results: [expectedResult], success: false }]),
     ),
     undefined,
   );
@@ -165,7 +192,7 @@ test("accepts clean command JSON and rejects file-import result shapes", () => {
     parseProductionD1VerificationOutput(
       JSON.stringify([
         {
-          results: [expectedProductionD1Result, expectedProductionD1Result],
+          results: [expectedResult, expectedResult],
           success: true,
         },
       ]),
@@ -180,9 +207,13 @@ test("accepts clean command JSON and rejects file-import result shapes", () => {
 
 test("strictly accepts only private mode-restricted SQL files", async () => {
   const directory = mkdtempSync(join(tmpdir(), "chorotate-d1-operator-test-"));
+  mkdirSync(resolve(".chorotate"), { recursive: true, mode: 0o700 });
+  const localDirectory = mkdtempSync(resolve(".chorotate/d1-operator-test-"));
   const sqlPath = join(directory, "bootstrap.sql");
+  const localSqlPath = join(localDirectory, "bootstrap.sql");
   const textPath = join(directory, "bootstrap.txt");
   writeFileSync(sqlPath, "SELECT 1;\n", { mode: 0o600 });
+  writeFileSync(localSqlPath, "SELECT 1;\n", { mode: 0o600 });
   writeFileSync(textPath, "SELECT 1;\n", { mode: 0o600 });
   try {
     assert.deepEqual(await parseProductionD1OperatorArgs(["migrations-list"]), {
@@ -197,6 +228,10 @@ test("strictly accepts only private mode-restricted SQL files", async () => {
     assert.deepEqual(
       await parseProductionD1OperatorArgs(["execute", "--file", sqlPath]),
       { operation: "execute", sqlPath: realpathSync(sqlPath) },
+    );
+    assert.deepEqual(
+      await parseProductionD1OperatorArgs(["execute", "--file", localSqlPath]),
+      { operation: "execute", sqlPath: realpathSync(localSqlPath) },
     );
     for (const args of [
       [],
@@ -226,6 +261,7 @@ test("strictly accepts only private mode-restricted SQL files", async () => {
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });
+    rmSync(localDirectory, { recursive: true, force: true });
   }
 });
 

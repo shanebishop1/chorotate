@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -15,6 +15,16 @@ import {
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const usage =
   "Usage: node scripts/production-d1-operator.mjs migrations-list | migrations-apply | execute --file <private-sql-path>";
+
+/** @param {string} directory @param {string} path */
+function outsideDirectory(directory, path) {
+  const relation = relative(directory, path);
+  return (
+    isAbsolute(relation) ||
+    relation === ".." ||
+    relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+  );
+}
 
 /**
  * @param {string[]} args
@@ -35,15 +45,13 @@ export async function parseProductionD1OperatorArgs(args) {
     throw new Error(usage);
   }
   const sqlPath = await realpath(resolve(args[2]));
-  const relation = relative(repositoryRoot, sqlPath);
   if (
-    !(
-      isAbsolute(relation) ||
-      relation === ".." ||
-      relation.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
-    )
+    !outsideDirectory(repositoryRoot, sqlPath) &&
+    outsideDirectory(join(repositoryRoot, ".chorotate"), sqlPath)
   ) {
-    throw new Error("Private SQL path must be outside the repository");
+    throw new Error(
+      "Private SQL path must be outside the repository or under .chorotate",
+    );
   }
   const sqlStat = await stat(sqlPath);
   if (

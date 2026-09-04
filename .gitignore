@@ -12,5 +12,6 @@
 .mf
 .wrangler
 .dev.vars*
+.chorotate/
 !.dev.vars.example
 !.env.example

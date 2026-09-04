@@ -33,10 +33,11 @@ if (dryRun) {
 
 /** @type {string} */
 let verificationQuery;
+let expectedResult;
 try {
-  verificationQuery = buildProductionD1VerificationQuery(
-    productionD1SettingsFromEnvironment(process.env),
-  );
+  const settings = productionD1SettingsFromEnvironment(process.env);
+  verificationQuery = buildProductionD1VerificationQuery(settings);
+  expectedResult = expectedProductionD1Result(settings.memberCount);
 } catch (error) {
   console.error(
     error instanceof Error
@@ -91,7 +92,7 @@ if (row === undefined) {
   process.exit(1);
 }
 
-const failures = Object.entries(expectedProductionD1Result)
+const failures = Object.entries(expectedResult)
   .filter(([name, value]) => row[name] !== value)
   .map(([name]) => name);
 if (failures.length > 0) {
