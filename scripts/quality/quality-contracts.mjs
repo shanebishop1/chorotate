@@ -283,6 +283,7 @@ const contactSourceFindings = productionSources
       ![
         "app/domain/read-models/history.ts",
         "app/domain/read-models/schedule.ts",
+        "app/domain/reminders/contact-eligibility.ts",
         "app/domain/reminders/dispatcher.ts",
         "app/domain/reminders/planner.ts",
       ].includes(path),
