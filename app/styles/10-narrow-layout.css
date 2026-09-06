@@ -1,0 +1,26 @@
+@media (max-width: 365px) {
+  .brand {
+    font-size: 1.03rem;
+  }
+
+  .brand > span:last-child {
+    display: none;
+  }
+
+  .header-actions {
+    gap: 5px;
+  }
+
+  .handoff-next-person {
+    flex-wrap: wrap;
+  }
+
+  .review-route {
+    gap: 7px;
+  }
+
+  .review-route .person {
+    width: 38px;
+    height: 38px;
+  }
+}

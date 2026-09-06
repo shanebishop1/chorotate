@@ -1,0 +1,193 @@
+.app-shell {
+  --canvas: #f4f0e7;
+  --canvas-fade: #eee7d9;
+  --surface: #fffcf6;
+  --surface-raised: #ffffff;
+  --surface-soft: #ebe5d9;
+  --ink: #27231d;
+  --muted: #655e53;
+  --faint: #6f685d;
+  --line: #ded6c8;
+  --line-strong: #c9bdab;
+  --relay: #a54620;
+  --relay-deep: #813415;
+  --relay-soft: #f4ddcf;
+  --now: #f5e8bd;
+  --now-line: #ddc46e;
+  --positive: #276b55;
+  --positive-soft: #dcebe2;
+  --danger: #a4372b;
+  --danger-soft: #f7dfda;
+  --focus: #b3451b;
+  --shadow-sm: 0 1px 2px rgb(44 36 25 / 6%), 0 5px 18px rgb(44 36 25 / 5%);
+  --shadow-lg: 0 22px 70px rgb(37 29 18 / 18%);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 9% 4%, rgb(255 255 255 / 62%) 0 11rem, transparent 24rem),
+    var(--canvas);
+  color: var(--ink);
+}
+
+.app-shell[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #18150f;
+  --canvas-fade: #211c14;
+  --surface: #242019;
+  --surface-raised: #2b261d;
+  --surface-soft: #342e22;
+  --ink: #f6eedf;
+  --muted: #b9ae9c;
+  --faint: #a79d8e;
+  --line: #40382b;
+  --line-strong: #5b4f3c;
+  --relay: #e78d5a;
+  --relay-deep: #f0a678;
+  --relay-soft: #422719;
+  --now: #352e17;
+  --now-line: #79642d;
+  --positive: #8cd6b9;
+  --positive-soft: #173d31;
+  --danger: #ff9c8d;
+  --danger-soft: #4a201c;
+  --focus: #f2a06f;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 20px rgb(0 0 0 / 16%);
+  --shadow-lg: 0 25px 80px rgb(0 0 0 / 55%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell:not([data-theme]) {
+    color-scheme: dark;
+    --canvas: #18150f;
+    --canvas-fade: #211c14;
+    --surface: #242019;
+    --surface-raised: #2b261d;
+    --surface-soft: #342e22;
+    --ink: #f6eedf;
+    --muted: #b9ae9c;
+    --faint: #a79d8e;
+    --line: #40382b;
+    --line-strong: #5b4f3c;
+    --relay: #e78d5a;
+    --relay-deep: #f0a678;
+    --relay-soft: #422719;
+    --now: #352e17;
+    --now-line: #79642d;
+    --positive: #8cd6b9;
+    --positive-soft: #173d31;
+    --danger: #ff9c8d;
+    --danger-soft: #4a201c;
+    --focus: #f2a06f;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 20px rgb(0 0 0 / 16%);
+    --shadow-lg: 0 25px 80px rgb(0 0 0 / 55%);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 10px;
+  left: 10px;
+  min-height: 44px;
+  padding: 11px 16px;
+  border-radius: 11px;
+  background: var(--relay);
+  color: white;
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.icon {
+  width: 21px;
+  height: 21px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.site-header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 91%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.header-row,
+.primary-nav,
+.main-content,
+.site-footer {
+  width: min(1120px, 100%);
+  margin-inline: auto;
+}
+
+.header-row {
+  display: flex;
+  min-height: 70px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 22px 7px;
+}
+
+.brand {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 11px;
+  color: var(--ink);
+  font-size: 1.18rem;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  padding: 7px;
+  border-radius: 11px;
+  background: var(--relay);
+  box-shadow: inset 0 -3px 0 rgb(82 26 7 / 17%);
+}
+
+.brand-mark span {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border: 2px solid white;
+  border-radius: 50%;
+}
+
+.brand-mark span + span {
+  margin-left: -1px;
+}
+
+.brand-mark::after {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 9px;
+  height: 2px;
+  border-radius: 2px;
+  background: white;
+  content: "";
+  transform: rotate(-35deg);
+}
+

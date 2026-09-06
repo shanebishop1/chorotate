@@ -1,0 +1,184 @@
+.sign-in-page {
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  padding:
+    calc(24px + env(safe-area-inset-top))
+    calc(24px + env(safe-area-inset-right))
+    calc(24px + env(safe-area-inset-bottom))
+    calc(24px + env(safe-area-inset-left));
+  place-items: center;
+}
+
+.app-shell.sign-in-shell {
+  --shutter-primary: #d95f32;
+  --shutter-secondary: #f3f1eb;
+  position: relative;
+  isolation: isolate;
+  scrollbar-gutter: auto;
+}
+
+html[data-theme="dark"] .app-shell.sign-in-shell {
+  --shutter-primary: #8f492f;
+  --shutter-secondary: #181b17;
+}
+
+.sign-in-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 15px;
+  text-align: center;
+}
+
+.sign-in-shutters {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: none;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 900px;
+}
+
+.sign-in-shutters span {
+  flex: 1 1 10%;
+  min-width: 0;
+  background: var(--shutter-primary);
+  box-shadow:
+    inset 1px 0 rgb(255 255 255 / 8%),
+    inset -1px 0 rgb(35 20 14 / 12%);
+  transform-origin: center;
+}
+
+.sign-in-shutters span:nth-child(even) {
+  background: var(--shutter-secondary);
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters {
+  display: flex;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span {
+  animation: sign-in-shutter-open 900ms cubic-bezier(0.74, 0.02, 0.2, 1) forwards;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(even) {
+  animation-name: sign-in-shutter-open-down;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(2),
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(9) {
+  animation-delay: 35ms;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(3),
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(8) {
+  animation-delay: 70ms;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(4),
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(7) {
+  animation-delay: 105ms;
+}
+
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(5),
+html[data-sign-in-intro="play"] .sign-in-shutters span:nth-child(6) {
+  animation-delay: 140ms;
+}
+
+html[data-sign-in-intro="play"] .sign-in-panel {
+  animation: sign-in-panel-arrive 620ms 650ms cubic-bezier(0.2, 1.25, 0.36, 1) both;
+}
+
+html[data-sign-in-intro="play"] .sign-in-panel .brand-mark .icon path {
+  stroke-dasharray: 42;
+  stroke-dashoffset: 42;
+  animation: sign-in-logo-draw 580ms 760ms ease-out forwards;
+}
+
+@keyframes sign-in-shutter-open {
+  0% {
+    transform: translateY(0) rotateY(0);
+  }
+  58% {
+    transform: translateY(0) rotateY(76deg);
+  }
+  100% {
+    transform: translateY(-112%) rotateY(88deg);
+  }
+}
+
+@keyframes sign-in-shutter-open-down {
+  0% {
+    transform: translateY(0) rotateY(0);
+  }
+  58% {
+    transform: translateY(0) rotateY(-76deg);
+  }
+  100% {
+    transform: translateY(112%) rotateY(-88deg);
+  }
+}
+
+@keyframes sign-in-panel-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sign-in-logo-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.sign-in-panel h1 {
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+.sign-in-panel .auth-control {
+  margin-top: 7px;
+}
+
+.sign-in-panel .button.primary {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.google-mark {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.auth-control .button.is-pending {
+  animation: auth-submit-pending 650ms ease-in-out infinite alternate;
+}
+
+@keyframes auth-submit-pending {
+  to {
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-in-shutters {
+    display: none !important;
+  }
+
+  .sign-in-panel,
+  .sign-in-panel .brand-mark .icon path {
+    animation: none !important;
+  }
+}

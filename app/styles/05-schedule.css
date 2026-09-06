@@ -1,0 +1,221 @@
+.schedule-table-wrap {
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.filter-row .custom-dropdown {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(12rem, 100%);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.schedule-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: separate;
+  border-spacing: 8px;
+}
+
+.schedule-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 10px;
+  text-align: left;
+}
+
+.schedule-table thead th {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.schedule-table thead th span,
+.schedule-table thead th small {
+  display: block;
+}
+
+.schedule-table thead th span {
+  color: var(--ink);
+  font-size: 0.89rem;
+}
+
+.schedule-table thead th small {
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.schedule-table thead th.is-current {
+  border: 1px solid var(--now-line);
+  border-radius: 12px;
+  background: var(--now);
+}
+
+.schedule-table tbody th {
+  font-size: 0.82rem;
+}
+
+.schedule-table tbody th .chore-glyph {
+  width: 33px;
+  height: 33px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.schedule-table td {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+
+.schedule-table .on-duty-cell {
+  padding: 0;
+}
+
+.schedule-table tr.is-current > th,
+.schedule-table tr.is-current > td {
+  border-color: var(--now-line);
+  background: color-mix(in srgb, var(--now) 50%, var(--surface));
+}
+
+.schedule-table tbody th {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+
+.schedule-chore {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-chore .chore-glyph {
+  width: 34px;
+  height: 34px;
+}
+
+.schedule-person {
+  display: flex;
+  min-width: 126px;
+  align-items: center;
+  gap: 8px;
+}
+
+.assignment-source {
+  display: block;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 760;
+}
+
+.schedule-table .reminder-status {
+  max-width: 260px;
+}
+
+.schedule-person > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.schedule-person strong {
+  font-size: 0.82rem;
+}
+
+.schedule-person small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.schedule-person .period-range,
+.schedule-list .period-range {
+  margin-top: 3px;
+  font-size: 0.65rem;
+}
+
+.schedule-person .now-badge,
+.schedule-list .now-badge {
+  width: fit-content;
+  margin-top: 6px;
+}
+
+.schedule-person i {
+  position: absolute;
+  z-index: 1;
+  right: -15px;
+  color: var(--line-strong);
+  font-style: normal;
+}
+
+.schedule-list {
+  display: none;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-assignment-button,
+.schedule-card-button {
+  position: relative;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.schedule-assignment-button {
+  display: block;
+  min-height: 80px;
+  padding: 10px 32px 10px 10px;
+  border-radius: 13px;
+}
+
+.schedule-edit-cue {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  color: var(--faint);
+  font-size: 1.35rem;
+  font-weight: 650;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.schedule-assignment-button:focus-visible,
+.schedule-card-button:focus-visible {
+  outline-offset: -3px;
+}
+
+.filtered-empty {
+  padding: 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--muted);
+}

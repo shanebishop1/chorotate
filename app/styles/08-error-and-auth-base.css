@@ -1,0 +1,29 @@
+.error-shell {
+  min-height: 100vh;
+  padding: 10vh 20px;
+  background: #f4f0e7;
+  color: #27231d;
+  text-align: center;
+}
+
+.error-shell h1 {
+  font-family: Iowan Old Style, Georgia, serif;
+  font-size: 3rem;
+}
+
+.error-shell p {
+  margin-top: 10px;
+}
+
+@media (hover: hover) {
+  .primary-nav a:hover,
+  .button.quiet:hover,
+  .icon-button:hover {
+    border-color: var(--relay);
+  }
+
+  .button.primary:hover {
+    background: var(--relay-deep);
+  }
+}
+

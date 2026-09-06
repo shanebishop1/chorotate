@@ -1,0 +1,60 @@
+:root {
+  color-scheme: light dark;
+  font-family: "Avenir Next", Avenir, "Trebuchet MS", Corbel, system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: #f4f0e7;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button,
+a,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  color: inherit;
+}
+
+button:not(:disabled),
+label:has(input:not(:disabled)) {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+p,
+ol {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
