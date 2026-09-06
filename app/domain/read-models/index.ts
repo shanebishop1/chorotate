@@ -640,12 +640,16 @@ export async function getCurrentAndNext(
         count + Number(current !== null) + Number(next !== null),
       0,
     );
+    const currentCount = handoffs.reduce(
+      (count, { current }) => count + Number(current !== null),
+      0,
+    );
     const state =
-      assignmentCount === 0
-        ? "empty"
-        : assignmentCount < handoffs.length * 2
-          ? "unavailable"
-          : "ready";
+      currentCount > 0
+        ? "ready"
+        : assignmentCount === 0
+          ? "empty"
+          : "unavailable";
     return { state, handoffs };
   } catch (error) {
     if (error instanceof ReadModelError) throw error;

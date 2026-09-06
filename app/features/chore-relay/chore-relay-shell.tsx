@@ -74,6 +74,18 @@ export function ChoreRelayShell(props: Props) {
     media.addEventListener("change", sync);
     return () => media.removeEventListener("change", sync);
   }, []);
+  useEffect(() => {
+    if (
+      props.state === "unauthorized" &&
+      document.documentElement.dataset.signInIntro === "play"
+    ) {
+      try {
+        sessionStorage.setItem("chorotate-sign-in-intro-v1", "1");
+      } catch {
+        document.documentElement.dataset.signInIntro = "settled";
+      }
+    }
+  }, [props.state]);
   function toggleTheme() {
     const next = (theme ?? effectiveTheme()) === "dark" ? "light" : "dark";
     applyTheme(next);
@@ -94,6 +106,11 @@ export function ChoreRelayShell(props: Props) {
             <AuthControl kind="sign-in" />
           </div>
         </main>
+        <div className="sign-in-shutters" aria-hidden="true">
+          {Array.from({ length: 10 }, (_, index) => (
+            <span key={index} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -359,7 +376,7 @@ function NowView({
       <div className="handoff-grid">
         {current.handoffs.map(
           ({ chore, currentPeriod, nextPeriod, current: assignment, next }) =>
-            assignment && next ? (
+            assignment ? (
               <article className="handoff-card" key={assignment.assignmentId}>
                 <div className="card-topline">
                   <div className="current-person">
@@ -377,16 +394,18 @@ function NowView({
                   today={data.localToday}
                   label={`${chore.name} current period`}
                 />
-                <ReminderStatus reminder={assignment.reminder} />
+                <ReminderStatus reminder={assignment.reminder} reserveSpace />
                 <p className="chore-description">{chore.instructions}</p>
-                <div className="handoff-strip">
-                  <span className="strip-label">Next period</span>
-                  <div className="handoff-next-person">
-                    <Person member={next.member} size="tiny" />
-                    <strong>{next.member.displayName}</strong>
+                {next ? (
+                  <div className="handoff-strip">
+                    <span className="strip-label">Next period</span>
+                    <div className="handoff-next-person">
+                      <Person member={next.member} size="tiny" />
+                      <strong>{next.member.displayName}</strong>
+                    </div>
+                    <PeriodRange range={nextPeriod} />
                   </div>
-                  <PeriodRange range={nextPeriod} />
-                </div>
+                ) : null}
                 <button
                   className="button quiet"
                   type="button"
@@ -1693,69 +1712,29 @@ function PeriodRange({
     </span>
   );
 }
-function ReminderStatus({ reminder }: { reminder: ProjectedReminderStatus }) {
-  const messages: Array<{
-    key: string;
-    icon: "alert" | "calendar" | "check";
-    tone: "attention" | "neutral" | "positive";
-    text: string;
-  }> = [];
-  const contactMessages = {
-    missing_contact: "Reminder contact missing",
-    unconsented: "Reminder consent not recorded",
-    suppressed: "Reminders suppressed",
-  } as const;
-  if (reminder.contactStatus !== "ready") {
-    messages.push({
-      key: `contact-${reminder.contactStatus}`,
-      icon: "alert",
-      tone: "attention",
-      text: contactMessages[reminder.contactStatus],
-    });
-  }
-  for (const occurrence of reminder.occurrences) {
-    if (occurrence.result === "pending") continue;
-    const phase = occurrence.phase === "evening" ? "Evening" : "Morning";
-    const details =
-      occurrence.result === "accepted"
-        ? {
-            icon: "check" as const,
-            tone: "positive" as const,
-            text: `${phase} reminder accepted for sending`,
-          }
-        : occurrence.result === "delivery_unknown"
-          ? {
-              icon: "alert" as const,
-              tone: "attention" as const,
-              text: `Reminder delivery unconfirmed (${occurrence.phase})`,
-            }
-          : {
-              icon: "alert" as const,
-              tone: "attention" as const,
-              text: `${phase} reminder missed`,
-            };
-    messages.push({
-      key: `${occurrence.phase}-${occurrence.result}`,
-      ...details,
-    });
-  }
-  if (reminder.correctionNeeded) {
-    messages.push({
-      key: "correction",
-      icon: "alert",
-      tone: "attention",
-      text: "Reminder correction needed",
-    });
-  }
-  if (messages.length === 0) return null;
+function ReminderStatus({
+  reminder,
+  reserveSpace = false,
+}: {
+  reminder: ProjectedReminderStatus;
+  reserveSpace?: boolean;
+}) {
+  const accepted = reminder.occurrences.some(
+    ({ phase, result }) => phase === "morning" && result === "accepted",
+  );
+  if (!accepted && !reserveSpace) return null;
   return (
-    <ul className="reminder-status" aria-label="Reminder status">
-      {messages.map((message) => (
-        <li key={message.key} className={`is-${message.tone}`}>
-          <Icon name={message.icon} />
-          <span>{message.text}</span>
+    <ul
+      className={`reminder-status${reserveSpace ? " is-reserved" : ""}`}
+      aria-label={accepted ? "Reminder status" : undefined}
+      aria-hidden={!accepted}
+    >
+      {accepted ? (
+        <li className="is-positive">
+          <Icon name="check" />
+          <span>Morning reminder</span>
         </li>
-      ))}
+      ) : null}
     </ul>
   );
 }

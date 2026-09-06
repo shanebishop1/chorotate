@@ -19,6 +19,12 @@
       document
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute("content", theme === "dark" ? "#111310" : "#f3f1eb");
+      const introKey = "chorotate-sign-in-intro-v1";
+      document.documentElement.dataset.signInIntro =
+        !matchMedia("(prefers-reduced-motion: reduce)").matches &&
+        !sessionStorage.getItem(introKey)
+          ? "play"
+          : "settled";
     </script>
     <title>Chore Relay browser fixture</title>
   </head>

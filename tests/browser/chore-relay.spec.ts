@@ -82,6 +82,41 @@ test("view changes keep the header and content rails stationary", async ({
   expect(await positions()).toEqual(before);
 });
 
+test("navigation keeps its background flush while raising mobile tabs", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const geometry = await page.locator(".primary-nav").evaluate((nav) => {
+    const link = nav.querySelector("a");
+    if (!link) throw new Error("primary navigation link is missing");
+    const navRect = nav.getBoundingClientRect();
+    const contentBottom = Math.max(
+      ...Array.from(
+        link.children,
+        (child) => child.getBoundingClientRect().bottom,
+      ),
+    );
+    const styles = getComputedStyle(nav);
+    return {
+      navBottom: navRect.bottom,
+      contentBottom,
+      viewportBottom: window.innerHeight,
+      navPosition: styles.position,
+      navPaddingBottom: styles.paddingBottom,
+    };
+  });
+
+  if ((page.viewportSize()?.width ?? 0) <= 760) {
+    expect(geometry.navPosition).toBe("fixed");
+    expect(geometry.navPaddingBottom).toBe("17px");
+    expect(geometry.navBottom).toBe(geometry.viewportBottom);
+    expect(geometry.viewportBottom - geometry.contentBottom).toBe(19);
+  } else {
+    expect(geometry.navPosition).toBe("static");
+    expect(geometry.navPaddingBottom).toBe("8px");
+  }
+});
+
 test("signed-out landing is centered and omits application navigation", async ({
   page,
 }) => {
@@ -105,6 +140,37 @@ test("signed-out landing is centered and omits application navigation", async ({
   });
   expect(Math.abs(alignment.centerX - alignment.viewportX)).toBeLessThan(2);
   expect(Math.abs(alignment.centerY - alignment.viewportY)).toBeLessThan(2);
+});
+
+test("signed-out shutter intro runs once per session", async ({ page }) => {
+  await page.goto("/?auth=unauthorized");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-sign-in-intro",
+    "play",
+  );
+  await expect(page.locator(".sign-in-shutters")).toBeVisible();
+
+  await page.reload();
+
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-sign-in-intro",
+    "settled",
+  );
+  await expect(page.locator(".sign-in-shutters")).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Sign in with Google" }),
+  ).toBeVisible();
+});
+
+test("signed-out shutter intro respects reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/?auth=unauthorized");
+
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-sign-in-intro",
+    "settled",
+  );
+  await expect(page.locator(".sign-in-shutters")).toBeHidden();
 });
 
 test("authentication feedback animates without replacing button labels", async ({
@@ -506,6 +572,9 @@ test("household calendar moves between months without navigation", async ({
   await expect(
     page.getByRole("button", { name: /Reassign Trash.*Aug 14/ }).first(),
   ).toBeVisible();
+  const calendarGlyph = page.locator(".month-assignment .chore-glyph").first();
+  await expect(calendarGlyph).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(calendarGlyph).toHaveCSS("border-top-style", "none");
 
   await page.getByRole("button", { name: "Next month" }).click();
   await expect(
@@ -524,9 +593,10 @@ test("visible reminder states do not expose contact or provider data", async ({
 }) => {
   await page.goto("/?view=now");
   const main = page.locator("main");
-  await expect(main).toContainText("Evening reminder accepted for sending");
-  await expect(main).toContainText("Reminder delivery unconfirmed");
-  await expect(main).toContainText("Reminder correction needed");
+  await expect(main).toContainText("Morning reminder");
+  await expect(main).not.toContainText("Evening reminder");
+  await expect(main).not.toContainText("Reminder delivery unconfirmed");
+  await expect(main).not.toContainText("Reminder correction needed");
   await expect(main).not.toContainText("reminder planned");
   await expect(main).not.toContainText(/Textbelt|textId|quota|phone/i);
 });
@@ -765,6 +835,7 @@ test("landing and header use the same brand-mark geometry", async ({
   await page.goto("/?view=now");
   const headerMark = await markGeometry(page);
   await page.goto("/?auth=unauthorized");
+  await page.waitForTimeout(1_400);
   expect(await markGeometry(page)).toEqual(headerMark);
 });
 

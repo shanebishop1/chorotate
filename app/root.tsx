@@ -16,7 +16,7 @@ export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
 
-const themeScript = `(()=>{try{const s=localStorage.getItem("chorotate-theme");const t=s==="light"||s==="dark"?s:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",t==="dark"?"#1d201c":"#fffefa")}catch{}})()`;
+const themeScript = `(()=>{try{const s=localStorage.getItem("chorotate-theme");const t=s==="light"||s==="dark"?s:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]')?.setAttribute("content",t==="dark"?"#1d201c":"#fffefa")}catch{}try{const key="chorotate-sign-in-intro-v1";document.documentElement.dataset.signInIntro=!matchMedia("(prefers-reduced-motion: reduce)").matches&&!sessionStorage.getItem(key)?"play":"settled"}catch{document.documentElement.dataset.signInIntro="settled"}})()`;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -31,10 +31,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" content="#fffefa" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta
-          name="apple-mobile-web-app-status-bar-style"
-          content="black-translucent"
-        />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="ChoRotate" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <Meta />

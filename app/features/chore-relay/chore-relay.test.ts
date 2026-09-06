@@ -88,7 +88,7 @@ const reminder = (
             },
             {
               phase: "morning",
-              result: "pending",
+              result: choreId === "trash" ? "accepted" : "pending",
               correctionNeeded: false,
             },
           ]
@@ -279,12 +279,14 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).not.toContain("reminder planned");
   });
 
-  it("surfaces reminder outcomes and corrections without provider or contact data", () => {
+  it("shows only the configured morning reminder", () => {
     const html = render("now");
-    expect(html).toContain("Evening reminder accepted for sending");
-    expect(html).toContain("Reminder delivery unconfirmed");
-    expect(html).toContain("Reminder correction needed");
-    expect(html).not.toMatch(/textbelt|phone|quota|textId/i);
+    expect(html).toContain("Morning reminder");
+    expect(html.match(/Morning reminder/g)).toHaveLength(1);
+    expect(html.match(/reminder-status is-reserved/g)).toHaveLength(2);
+    expect(html).not.toMatch(
+      /evening reminder|accepted for sending|delivery unconfirmed|reminder missed|reminder contact|reminder consent|reminders suppressed/i,
+    );
   });
 
   it("groups both atomic swap legs in visible History", () => {
@@ -314,6 +316,7 @@ describe("Chore Relay integrated rendering", () => {
   it("fails closed with explicit unauthorized and unavailable SSR states", () => {
     const unauthorized = render("now", "unauthorized");
     expect(unauthorized).toContain('class="sign-in-page"');
+    expect(unauthorized).toContain('class="sign-in-shutters"');
     expect(unauthorized).toContain("Sign in with Google");
     expect(unauthorized).toContain('class="google-mark"');
     expect(unauthorized).not.toContain("This household is private");

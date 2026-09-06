@@ -607,7 +607,7 @@ describe("authorized schedule read models", () => {
         now: new Date("2026-08-31T12:00:00Z"),
       }),
     ).toMatchObject({
-      state: "unavailable",
+      state: "ready",
       handoffs: [{ current: { assignmentId: "partial" }, next: null }],
     });
   });

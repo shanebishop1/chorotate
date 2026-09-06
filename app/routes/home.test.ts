@@ -49,6 +49,7 @@ const config = {
     betterAuthSecret: "x".repeat(32),
     googleClientId: "test",
     googleClientSecret: "test",
+    textbeltApiKey: "test-only-textbelt-api-key",
   },
 } satisfies RuntimeConfig;
 

@@ -94,7 +94,7 @@ const reminder = (
             },
             {
               phase: "morning",
-              result: "pending",
+              result: choreId === "trash" ? "accepted" : "pending",
               correctionNeeded: false,
             },
           ]
