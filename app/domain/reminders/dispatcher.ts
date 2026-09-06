@@ -1,5 +1,10 @@
 import type { D1DatabaseLike } from "../storage/d1";
+import { localDateAt } from "./local-time";
 import type { OccurrencePhase } from "./planner";
+import {
+  contactEligibilityFailure,
+  type SmsContact,
+} from "./contact-eligibility";
 import {
   assertSingleSegmentGsm7,
   type TextbeltResponse,
@@ -18,10 +23,7 @@ interface ClaimedRow {
   lease_expires_at: string;
 }
 
-interface ContactRow {
-  sms_phone_e164: string | null;
-  sms_consent_status: string;
-  sms_suppression_status: string;
+interface ContactRow extends SmsContact {
   member_active: number;
 }
 
@@ -106,28 +108,6 @@ export function buildReminderSms(input: {
   const message = `You're on ${input.choreName} this week- ${periodLabel(input.localPeriodStart)}`;
   assertSingleSegmentGsm7(message);
   return message;
-}
-
-const localDateFormatters = new Map<string, Intl.DateTimeFormat>();
-
-function localDateAt(now: Date, timeZone: string): string {
-  let formatter = localDateFormatters.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    localDateFormatters.set(timeZone, formatter);
-  }
-  const parts = Object.fromEntries(
-    formatter
-      .formatToParts(now)
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 async function recoverExpiredLeases(
@@ -249,17 +229,7 @@ async function currentContact(
 function contactFailure(contact: ContactRow | null): string | null {
   if (!contact) return "stale_assignment";
   if (contact.member_active !== 1) return "inactive_contact";
-  if (contact.sms_phone_e164 === null) return "missing_contact";
-  if (!/^\+[1-9]\d{1,14}$/.test(contact.sms_phone_e164)) {
-    return "invalid_contact";
-  }
-  if (contact.sms_consent_status !== "consented") {
-    return "contact_unconsented";
-  }
-  if (contact.sms_suppression_status !== "not_suppressed") {
-    return "contact_suppressed";
-  }
-  return null;
+  return contactEligibilityFailure(contact);
 }
 
 async function completeFenced(

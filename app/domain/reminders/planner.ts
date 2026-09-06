@@ -1,6 +1,10 @@
 import type { D1DatabaseLike } from "../storage/d1";
+import { localDateAt, zonedParts } from "./local-time";
+import {
+  contactEligibilityFailure,
+  type ContactFailureCategory,
+} from "./contact-eligibility";
 
-const localDateFormatter = new Map<string, Intl.DateTimeFormat>();
 const PLANNING_HORIZON_DAYS = 14;
 
 type DecimalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
@@ -89,29 +93,6 @@ function parseLocalTime(localTime: ReminderLocalTime): {
   return { hour: hour!, minute: minute! };
 }
 
-function zonedParts(date: Date, timeZone: string): Record<string, number> {
-  let formatter = localDateFormatter.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    });
-    localDateFormatter.set(timeZone, formatter);
-  }
-  return Object.fromEntries(
-    formatter
-      .formatToParts(date)
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, Number(value)]),
-  );
-}
-
 function sameLocalMinute(
   instant: Date,
   desired: LocalDateParts & { hour: number; minute: number },
@@ -188,11 +169,6 @@ export function occurrenceInstant(
   throw new RangeError("Unable to resolve local reminder time");
 }
 
-function localDateAt(instant: Date, timeZone: string): string {
-  const parts = zonedParts(instant, timeZone);
-  return `${String(parts.year).padStart(4, "0")}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
 function logicalOutboxId(
   assignmentId: string,
   version: number,
@@ -209,35 +185,13 @@ function logicalOutboxId(
   ].join(":");
 }
 
-type NonDeliveryCategory =
-  | "missing_contact"
-  | "invalid_contact"
-  | "contact_unconsented"
-  | "contact_suppressed";
-
-function contactFailure(
-  assignment: PlannedAssignmentRow,
-): NonDeliveryCategory | null {
-  if (assignment.sms_phone_e164 === null) return "missing_contact";
-  if (!/^\+[1-9]\d{1,14}$/.test(assignment.sms_phone_e164)) {
-    return "invalid_contact";
-  }
-  if (assignment.sms_consent_status !== "consented") {
-    return "contact_unconsented";
-  }
-  if (assignment.sms_suppression_status !== "not_suppressed") {
-    return "contact_suppressed";
-  }
-  return null;
-}
-
 async function insertOccurrence(
   database: D1DatabaseLike,
   assignment: PlannedAssignmentRow,
   phase: OccurrencePhase,
   availableAt: string,
   createdAt: string,
-  failureCategory: NonDeliveryCategory | "missed_occurrence" | null,
+  failureCategory: ContactFailureCategory | "missed_occurrence" | null,
 ): Promise<void> {
   const status = failureCategory === null ? "pending" : "failed";
   await database
@@ -415,7 +369,7 @@ export async function planReminders(
   }
 
   for (const assignment of assignments) {
-    const contactFailureCategory = contactFailure(assignment);
+    const contactFailureCategory = contactEligibilityFailure(assignment);
     const phase = "morning";
     const blocked = await reconcilePhase(database, assignment, phase, now);
     if (blocked) continue;
