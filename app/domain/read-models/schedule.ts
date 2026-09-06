@@ -1,6 +1,5 @@
 import {
   addDays,
-  assignmentFromRow,
   authorize,
   DEFAULT_SCHEDULE_WEEKS,
   idFilter,
@@ -10,15 +9,10 @@ import {
   MAX_CALENDAR_ASSIGNMENTS,
   MAX_CALENDAR_DAYS,
   MAX_PAGE_SIZE,
-  memberFromRow,
   pageInput,
   periodRange,
   ReadModelError,
-  stringValue,
   unavailable,
-  weekdayValue,
-  type AssignmentRow,
-  type ChoreRow,
   type Page,
   type PeriodRange,
   type ProjectedAssignment,
@@ -27,6 +21,14 @@ import {
   type ProjectionState,
   type ReadModelContext,
 } from "./shared";
+import {
+  assignmentFromRow,
+  choreFromRow,
+  memberFromRow,
+  type AssignmentRow,
+  type ChoreRow,
+  type MemberRow,
+} from "./projections";
 import { addLocalDays, chorePeriodAt } from "../rotation/period";
 
 export async function getActiveMembers(
@@ -50,12 +52,7 @@ export async function getActiveMembers(
          WHERE household_id = ? AND active = 1 ORDER BY display_name, id`,
       )
       .bind(household.id)
-      .all<{
-        id: unknown;
-        display_name: unknown;
-        active: unknown;
-        image_url: unknown;
-      }>();
+      .all<MemberRow>();
     return result.results.map((row) =>
       memberFromRow(row.id, row.display_name, row.active, row.image_url),
     );
@@ -197,13 +194,8 @@ export async function getCurrentAndNext(
     }
     const now = input.now ?? new Date();
     const chores = choreResult.results.map((row) => {
-      const startsOn = weekdayValue(row.ownership_start_weekday);
-      const chore: ProjectedChore = {
-        id: stringValue(row.chore_id),
-        name: stringValue(row.chore_name),
-        instructions: stringValue(row.chore_instructions),
-        ownershipStartWeekday: startsOn,
-      };
+      const chore = choreFromRow(row);
+      const startsOn = chore.ownershipStartWeekday;
       const current = chorePeriodAt(now, {
         timeZone: household.timeZone,
         startsOn,

@@ -8,7 +8,6 @@ import {
   localDateTimeAt,
   nullableString,
   pageInput,
-  reminderStatus,
   ReadModelError,
   stringValue,
   unavailable,
@@ -19,6 +18,7 @@ import {
   type ProjectionState,
   type ReadModelContext,
 } from "./shared";
+import { reminderStatus } from "./projections";
 
 type OperationKind = "materialize" | "reassign" | "swap" | "correct";
 
