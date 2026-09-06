@@ -27,6 +27,7 @@ export function validTestEnvironment(
     BETTER_AUTH_SECRET: "test-only-better-auth-secret-00000000",
     GOOGLE_CLIENT_ID: "test-only-google-client-id",
     GOOGLE_CLIENT_SECRET: "test-only-google-client-secret",
+    TEXTBELT_API_KEY: "test-only-textbelt-api-key",
     ...overrides,
   };
 }

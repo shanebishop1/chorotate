@@ -92,7 +92,7 @@ function readContext(): ReadModelContext {
 }
 
 const dispatchInput = {
-  now: new Date("2026-03-08T20:01:00.000Z"),
+  now: new Date("2026-03-09T08:01:00.000Z"),
   leaseOwner: "cron-old",
   batchSize: 1,
   leaseMilliseconds: 30_000,
@@ -100,7 +100,7 @@ const dispatchInput = {
 };
 
 describe("SMS reminder reliability on workerd D1", () => {
-  it("runs the Cron cadence once on local Sunday, Monday, Thursday, and Friday and projects only redacted evidence", async () => {
+  it("runs the Cron cadence once on local Monday and Friday and projects only redacted evidence", async () => {
     await seedCadence();
     let clock = new Date("2026-03-08T20:01:00.000Z");
     let textId = 8000;
@@ -115,13 +115,13 @@ describe("SMS reminder reliability on workerd D1", () => {
       createTransport: () => ({ send }),
     });
     const cronInstants = [
-      ["2026-03-08T20:01:00.000Z", 1],
-      ["2026-03-09T08:01:00.000Z", 2],
-      ["2026-03-10T20:01:00.000Z", 2],
-      ["2026-03-11T20:01:00.000Z", 2],
-      ["2026-03-12T20:01:00.000Z", 3],
-      ["2026-03-13T08:01:00.000Z", 4],
-      ["2026-03-14T20:01:00.000Z", 4],
+      ["2026-03-08T20:01:00.000Z", 0],
+      ["2026-03-09T08:01:00.000Z", 1],
+      ["2026-03-10T20:01:00.000Z", 1],
+      ["2026-03-11T20:01:00.000Z", 1],
+      ["2026-03-12T20:01:00.000Z", 1],
+      ["2026-03-13T08:01:00.000Z", 2],
+      ["2026-03-14T20:01:00.000Z", 2],
     ] as const;
 
     for (const [instant, expectedSendCount] of cronInstants) {
@@ -137,23 +137,11 @@ describe("SMS reminder reliability on workerd D1", () => {
     expect(send.mock.calls.map(([message]) => message)).toEqual([
       {
         phone: "+15555550101",
-        message:
-          "ChoRotate evening reminder: Dishwasher, Mar 9 to Mar 15, 2026 inclusive. Reply STOP to opt out.",
-      },
-      {
-        phone: "+15555550101",
-        message:
-          "ChoRotate morning reminder: Dishwasher, Mar 9 to Mar 15, 2026 inclusive. Reply STOP to opt out.",
+        message: "You're on Dishwasher this week- Mar 9 to Mar 15",
       },
       {
         phone: "+15555550102",
-        message:
-          "ChoRotate evening reminder: Trash, Mar 13 to Mar 19, 2026 inclusive. Reply STOP to opt out.",
-      },
-      {
-        phone: "+15555550102",
-        message:
-          "ChoRotate morning reminder: Trash, Mar 13 to Mar 19, 2026 inclusive. Reply STOP to opt out.",
+        message: "You're on Trash this week- Mar 13 to Mar 19",
       },
     ]);
     const outbox = await d1()
@@ -163,7 +151,7 @@ describe("SMS reminder reliability on workerd D1", () => {
       )
       .all();
     expect(outbox.results).toEqual(
-      Array.from({ length: 4 }, () => ({
+      Array.from({ length: 2 }, () => ({
         status: "accepted",
         textbelt_quota_remaining: 0,
         correction_needed: 0,
@@ -177,7 +165,7 @@ describe("SMS reminder reliability on workerd D1", () => {
     expect(projected.items).toHaveLength(2);
     expect(
       projected.items.flatMap(({ reminder }) => reminder.occurrences),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
     expect(JSON.stringify(projected)).not.toMatch(
       /\+1555|textbelt|quota|text.?id/i,
     );
@@ -235,7 +223,6 @@ describe("SMS reminder reliability on workerd D1", () => {
         .all();
       expect(evidence.results).toEqual([
         { status: "failed", sanitized_error_category: category },
-        { status: "failed", sanitized_error_category: category },
       ]);
       const projected = await getHouseholdList(readContext(), {
         request: new Request("https://app.example.test/"),
@@ -275,16 +262,10 @@ describe("SMS reminder reliability on workerd D1", () => {
         .all();
       expect(evidence.results).toEqual([
         {
-          occurrence_phase: "evening",
+          occurrence_phase: "morning",
           status: "delivery_unknown",
           attempt_count: 1,
           sanitized_error_category: "ambiguous_transport_result",
-        },
-        {
-          occurrence_phase: "morning",
-          status: "failed",
-          attempt_count: 0,
-          sanitized_error_category: "missed_occurrence",
         },
       ]);
       expect(JSON.stringify(evidence.results)).not.toMatch(
@@ -293,9 +274,9 @@ describe("SMS reminder reliability on workerd D1", () => {
     },
   );
 
-  it("surfaces post-send correction evidence and sends only the next regular occurrence to the current assignee", async () => {
+  it("surfaces post-send correction evidence without sending a replacement", async () => {
     await seedCadence();
-    let clock = new Date("2026-03-08T20:01:00.000Z");
+    let clock = new Date("2026-03-09T08:01:00.000Z");
     let textId = 9000;
     const send = vi.fn(async (_input: TextbeltSmsInput) => ({
       success: true as const,
@@ -313,11 +294,11 @@ describe("SMS reminder reliability on workerd D1", () => {
         `UPDATE weekly_assignments
          SET member_id='m2',version=2,source='reassignment',actor_member_id='m1',
              request_id='post-send',operation_id='post-send-op',
-             operation_kind='reassign',occurred_at='2026-03-08T20:30:00Z'
+              operation_kind='reassign',occurred_at='2026-03-09T08:30:00Z'
          WHERE id='a1'`,
       )
       .run();
-    clock = new Date("2026-03-08T21:00:00.000Z");
+    clock = new Date("2026-03-09T09:00:00.000Z");
 
     await scheduled({ scheduledTime: 2 } as ScheduledController, runtime());
 
@@ -330,7 +311,6 @@ describe("SMS reminder reliability on workerd D1", () => {
     expect(afterChange.items[0]?.member.id).toBe("m2");
     expect(afterChange.items[0]?.reminder).toMatchObject({
       correctionNeeded: true,
-      occurrences: [{ phase: "morning", result: "pending" }],
     });
     const correctionRows = await d1()
       .prepare(
@@ -343,35 +323,12 @@ describe("SMS reminder reliability on workerd D1", () => {
     expect(correctionRows.results).toEqual([
       {
         assignment_version: 1,
-        occurrence_phase: "evening",
+        occurrence_phase: "morning",
         status: "accepted",
         recipient_member_id: "m1",
         correction_needed: 1,
       },
-      {
-        assignment_version: 1,
-        occurrence_phase: "morning",
-        status: "failed",
-        recipient_member_id: "m1",
-        correction_needed: 0,
-      },
-      {
-        assignment_version: 2,
-        occurrence_phase: "morning",
-        status: "pending",
-        recipient_member_id: "m2",
-        correction_needed: 0,
-      },
     ]);
-
-    clock = new Date("2026-03-09T08:01:00.000Z");
-    await scheduled({ scheduledTime: 3 } as ScheduledController, runtime());
-
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[1]?.[0]).toMatchObject({
-      phone: "+15555550102",
-      message: expect.stringContaining("morning reminder: Dishwasher"),
-    });
   });
 
   it("persists immutable occurrence and accepted Textbelt quota evidence", async () => {
@@ -390,7 +347,7 @@ describe("SMS reminder reliability on workerd D1", () => {
       d1()
         .prepare(
           `SELECT status,textbelt_text_id,textbelt_quota_remaining
-           FROM reminder_outbox WHERE occurrence_phase='evening'`,
+           FROM reminder_outbox WHERE occurrence_phase='morning'`,
         )
         .first(),
     ).resolves.toEqual({
@@ -420,7 +377,7 @@ describe("SMS reminder reliability on workerd D1", () => {
       .prepare(
         `UPDATE reminder_outbox
          SET status='leased',lease_owner='dead',lease_expires_at=?,attempt_count=1
-         WHERE occurrence_phase='evening'`,
+          WHERE occurrence_phase='morning'`,
       )
       .bind("2026-03-08T20:00:00.000Z")
       .run();
@@ -437,7 +394,7 @@ describe("SMS reminder reliability on workerd D1", () => {
       d1()
         .prepare(
           `SELECT status,sanitized_error_category
-           FROM reminder_outbox WHERE occurrence_phase='evening'`,
+           FROM reminder_outbox WHERE occurrence_phase='morning'`,
         )
         .first(),
     ).resolves.toEqual({
@@ -476,7 +433,7 @@ describe("SMS reminder reliability on workerd D1", () => {
       d1()
         .prepare(
           `SELECT status,textbelt_text_id,lease_owner
-           FROM reminder_outbox WHERE occurrence_phase='evening'`,
+           FROM reminder_outbox WHERE occurrence_phase='morning'`,
         )
         .first(),
     ).resolves.toEqual({

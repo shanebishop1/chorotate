@@ -186,18 +186,20 @@ check(
   !/RESEND_|\bresend\b/i.test(operatorSurfaces),
 );
 check(
-  "no Textbelt secret or API-key environment input",
-  !/(?:TEXTBELT|TEXT_BELT)[A-Z0-9_]*(?:KEY|SECRET|TOKEN)|(?:KEY|SECRET|TOKEN)[A-Z0-9_]*(?:TEXTBELT|TEXT_BELT)/i.test(
-    `${environmentContract}\n${scriptConfigurationContract}`,
-  ),
+  "private Textbelt API key stays in the secret contract",
+  /"TEXTBELT_API_KEY"/.test(environment) &&
+    /TEXTBELT_API_KEY=test-only-textbelt-api-key/.test(
+      read(".dev.vars.example"),
+    ) &&
+    !/PRODUCTION_TEXTBELT_API_KEY/.test(productionDeploy),
 );
 check(
-  "fixed public Textbelt transport",
+  "configured private Textbelt transport",
   /TEXTBELT_SMS_ENDPOINT\s*=\s*"https:\/\/textbelt\.com\/text"/.test(
     textbelt,
   ) &&
-    /TEXTBELT_PUBLIC_KEY\s*=\s*"textbelt"/.test(textbelt) &&
-    /key:\s*TEXTBELT_PUBLIC_KEY/.test(textbelt),
+    /apiKey:\s*string/.test(textbelt) &&
+    /key:\s*options\.apiKey/.test(textbelt),
 );
 
 check(

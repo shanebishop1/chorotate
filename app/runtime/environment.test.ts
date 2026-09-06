@@ -30,14 +30,9 @@ function runtimeSourceFiles(directory: string): string[] {
 }
 
 describe("parseRuntimeConfig", () => {
-  it("keeps provider credentials and member contacts out of environment inputs", () => {
+  it("keeps member contacts out of environment inputs", () => {
     const inputNames = [...plainBindingNames, ...secretBindingNames];
-    const forbiddenMarkers = [
-      ["RE", "SEND_"].join(""),
-      ["TEXT", "BELT"].join(""),
-      "PHONE",
-      "E164",
-    ];
+    const forbiddenMarkers = [["RE", "SEND_"].join(""), "PHONE", "E164"];
 
     expect(
       inputNames.filter((name) =>
@@ -93,6 +88,7 @@ describe("parseRuntimeConfig", () => {
     expect(config.secrets.googleClientSecret).toBe(
       "test-only-google-client-secret",
     );
+    expect(config.secrets.textbeltApiKey).toBe("test-only-textbelt-api-key");
     expect(config.reminders).toEqual({
       smsEnabled: true,
       batchSize: 25,
@@ -181,6 +177,7 @@ describe("parseRuntimeConfig", () => {
           "BETTER_AUTH_SECRET",
           "GOOGLE_CLIENT_ID",
           "GOOGLE_CLIENT_SECRET",
+          "TEXTBELT_API_KEY",
         ]),
       }),
     );

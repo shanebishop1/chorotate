@@ -33,7 +33,7 @@ describe("SMS occurrence planning", () => {
     ).toBe("2026-11-02T13:00:00.000Z");
   });
 
-  it("plans Dishwasher Sunday/Monday and Trash Thursday/Friday exactly once", async () => {
+  it("plans only day-of Dishwasher Monday and Trash Friday reminders", async () => {
     const database = reminderDatabase("UTC");
     insertAssignment(database, "dish", "2026-03-09", "m1", "dishwasher");
     insertAssignment(database, "bins", "2026-03-13", "m2", "trash");
@@ -52,21 +52,9 @@ describe("SMS occurrence planning", () => {
     ).toEqual([
       {
         assignment: "bins",
-        phase: "evening",
-        recipient: "m2",
-        availableAt: "2026-03-12T20:00:00.000Z",
-      },
-      {
-        assignment: "bins",
         phase: "morning",
         recipient: "m2",
         availableAt: "2026-03-13T08:00:00.000Z",
-      },
-      {
-        assignment: "dish",
-        phase: "evening",
-        recipient: "m1",
-        availableAt: "2026-03-08T20:00:00.000Z",
       },
       {
         assignment: "dish",
@@ -77,7 +65,52 @@ describe("SMS occurrence planning", () => {
     ]);
   });
 
-  it("uses separately configured evening and morning times", async () => {
+  it("bounds each Cron planning pass to the next two weeks", async () => {
+    const database = reminderDatabase("UTC");
+    insertAssignment(database, "near", "2026-03-13", "m1", "trash");
+    insertAssignment(database, "distant", "2026-03-16", "m2");
+
+    await expect(
+      planReminders(database, {
+        now: new Date("2026-03-01T12:00:00.000Z"),
+      }),
+    ).resolves.toEqual({ assignmentsConsidered: 1 });
+
+    expect(outboxRows(database).map((row) => row.assignment_id)).toEqual([
+      "near",
+    ]);
+  });
+
+  it("terminalizes an already-queued evening reminder", async () => {
+    const database = reminderDatabase("UTC");
+    insertAssignment(database, "dish", "2026-03-09", "m1");
+    await planReminders(database, {
+      now: new Date("2026-03-01T12:00:00.000Z"),
+    });
+    database.database
+      .prepare(
+        `INSERT OR REPLACE INTO reminder_outbox
+         (id,household_id,assignment_id,assignment_version,local_period_start,
+          chore_id,recipient_member_id,occurrence_phase,status,available_at,created_at)
+         VALUES ('old-evening','h','dish',1,'2026-03-09','dishwasher','m1',
+                 'evening','pending','2026-03-08T20:00:00.000Z','2026-03-01T12:00:00.000Z')`,
+      )
+      .run();
+
+    await planReminders(database, {
+      now: new Date("2026-03-02T12:00:00.000Z"),
+    });
+
+    expect(
+      outboxRows(database).find((row) => row.occurrence_phase === "evening"),
+    ).toMatchObject({
+      status: "failed",
+      sanitized_error_category: "occurrence_disabled",
+      terminal_at: "2026-03-02T12:00:00.000Z",
+    });
+  });
+
+  it("uses the configured morning time", async () => {
     const database = reminderDatabase("UTC");
     database.database
       .prepare(
@@ -93,7 +126,6 @@ describe("SMS occurrence planning", () => {
     });
 
     expect(outboxRows(database).map((row) => row.available_at)).toEqual([
-      "2026-03-08T17:45:00.000Z",
       "2026-03-09T06:30:00.000Z",
     ]);
   });
@@ -127,12 +159,6 @@ describe("SMS occurrence planning", () => {
 
       expect(outboxRows(database)).toEqual([
         expect.objectContaining({
-          occurrence_phase: "evening",
-          status: "failed",
-          sanitized_error_category: category,
-          terminal_at: "2026-03-01T12:00:00.000Z",
-        }),
-        expect.objectContaining({
           occurrence_phase: "morning",
           status: "failed",
           sanitized_error_category: category,
@@ -153,7 +179,7 @@ describe("SMS occurrence planning", () => {
         `UPDATE reminder_outbox
          SET status = 'leased', lease_owner = 'old-cron',
              lease_expires_at = '2026-03-02T11:59:00.000Z'
-         WHERE occurrence_phase = 'evening'`,
+          WHERE occurrence_phase = 'morning'`,
       )
       .run();
     reassign(database, "dish", "m2", 2);
@@ -165,22 +191,12 @@ describe("SMS occurrence planning", () => {
     const rows = outboxRows(database);
     expect(rows.filter((row) => row.assignment_version === 1)).toEqual([
       expect.objectContaining({
-        occurrence_phase: "evening",
-        status: "failed",
-        sanitized_error_category: "superseded",
-      }),
-      expect.objectContaining({
         occurrence_phase: "morning",
         status: "failed",
         sanitized_error_category: "superseded",
       }),
     ]);
     expect(rows.filter((row) => row.assignment_version === 2)).toEqual([
-      expect.objectContaining({
-        occurrence_phase: "evening",
-        recipient_member_id: "m2",
-        status: "pending",
-      }),
       expect.objectContaining({
         occurrence_phase: "morning",
         recipient_member_id: "m2",
@@ -201,40 +217,26 @@ describe("SMS occurrence planning", () => {
         .prepare(
           `UPDATE reminder_outbox
            SET status = ?, terminal_at = ?
-           WHERE occurrence_phase = 'evening'`,
+           WHERE occurrence_phase = 'morning'`,
         )
-        .run(terminalStatus, "2026-03-08T20:01:00.000Z");
+        .run(terminalStatus, "2026-03-09T08:01:00.000Z");
       reassign(database, "dish", "m2", 2);
 
-      const input = { now: new Date("2026-03-08T21:00:00.000Z") };
+      const input = { now: new Date("2026-03-09T09:00:00.000Z") };
       await planReminders(database, input);
       await planReminders(database, input);
 
       const rows = outboxRows(database);
-      expect(rows).toHaveLength(3);
+      expect(rows).toHaveLength(1);
       expect(rows).toContainEqual(
         expect.objectContaining({
           assignment_version: 1,
-          occurrence_phase: "evening",
+          occurrence_phase: "morning",
           status: terminalStatus,
           correction_needed: 1,
         }),
       );
-      expect(rows).toContainEqual(
-        expect.objectContaining({
-          assignment_version: 2,
-          occurrence_phase: "morning",
-          recipient_member_id: "m2",
-          status: "pending",
-          correction_needed: 0,
-        }),
-      );
-      expect(
-        rows.some(
-          (row) =>
-            row.assignment_version === 2 && row.occurrence_phase === "evening",
-        ),
-      ).toBe(false);
+      expect(rows.some((row) => row.assignment_version === 2)).toBe(false);
     },
   );
 
@@ -251,12 +253,6 @@ describe("SMS occurrence planning", () => {
     });
 
     expect(outboxRows(database)).toEqual([
-      expect.objectContaining({
-        occurrence_phase: "evening",
-        status: "failed",
-        sanitized_error_category: "missed_occurrence",
-        available_at: "2026-03-08T20:00:00.000Z",
-      }),
       expect.objectContaining({
         occurrence_phase: "morning",
         status: "failed",

@@ -9,7 +9,7 @@ import { planReminders } from "./planner";
 import type { TextbeltTransport } from "./textbelt";
 import { insertAssignment, outboxRows, reminderDatabase } from "./test-support";
 
-const now = new Date("2026-03-08T20:01:00.000Z");
+const now = new Date("2026-03-09T08:01:00.000Z");
 
 function input(overrides: Partial<DispatchInput> = {}): DispatchInput {
   return {
@@ -40,16 +40,14 @@ function acceptedTransport(textId = 42, quotaRemaining = 0): TextbeltTransport {
 }
 
 describe("SMS reminder content", () => {
-  it("identifies ChoRotate, phase, chore, inclusive range, and opt-out", () => {
+  it("names only the chore and date range", () => {
     const sms = buildReminderSms({
       phase: "morning",
       choreName: "Dishwasher",
       localPeriodStart: "2026-03-09",
     });
 
-    expect(sms).toBe(
-      "ChoRotate morning reminder: Dishwasher, Mar 9 to Mar 15, 2026 inclusive. Reply STOP to opt out.",
-    );
+    expect(sms).toBe("You're on Dishwasher this week- Mar 9 to Mar 15");
   });
 });
 
@@ -71,8 +69,7 @@ describe("reminder dispatcher", () => {
     expect(transport.send).toHaveBeenCalledOnce();
     expect(transport.send).toHaveBeenCalledWith({
       phone: "+15555550102",
-      message:
-        "ChoRotate evening reminder: Dishwasher, Mar 9 to Mar 15, 2026 inclusive. Reply STOP to opt out.",
+      message: "You're on Dishwasher this week- Mar 9 to Mar 15",
     });
     expect(outboxRows(database)[0]).toMatchObject({
       status: "accepted",
@@ -220,16 +217,10 @@ describe("reminder dispatcher", () => {
 
   it("expires stale prior-local-date pending work instead of catching up", async () => {
     const database = await dueDatabase();
-    database.database
-      .prepare(
-        `UPDATE reminder_outbox SET status='failed',terminal_at=?
-         WHERE occurrence_phase='morning'`,
-      )
-      .run("2026-03-08T20:01:00.000Z");
     const transport = acceptedTransport();
 
     await createReminderDispatcher(database, transport).dispatch(
-      input({ now: new Date("2026-03-09T20:01:00.000Z") }),
+      input({ now: new Date("2026-03-10T08:01:00.000Z") }),
     );
 
     expect(transport.send).not.toHaveBeenCalled();

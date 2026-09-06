@@ -1,5 +1,4 @@
 export const TEXTBELT_SMS_ENDPOINT = "https://textbelt.com/text";
-export const TEXTBELT_PUBLIC_KEY = "textbelt";
 
 export interface TextbeltSmsInput {
   phone: string;
@@ -28,6 +27,7 @@ export interface TextbeltTransport {
 
 export interface TextbeltTransportOptions {
   fetch?: typeof globalThis.fetch;
+  apiKey: string;
   timeoutMilliseconds: number;
 }
 
@@ -117,6 +117,9 @@ function parseTextbeltResponse(value: unknown): TextbeltResponse {
 export function createTextbeltTransport(
   options: TextbeltTransportOptions,
 ): TextbeltTransport {
+  if (!options.apiKey || options.apiKey !== options.apiKey.trim()) {
+    throw new RangeError("Textbelt API key is required");
+  }
   if (
     !Number.isInteger(options.timeoutMilliseconds) ||
     options.timeoutMilliseconds < 1_000 ||
@@ -146,7 +149,7 @@ export function createTextbeltTransport(
           body: JSON.stringify({
             phone: input.phone,
             message: input.message,
-            key: TEXTBELT_PUBLIC_KEY,
+            key: options.apiKey,
           }),
           signal: controller.signal,
         });

@@ -20,25 +20,29 @@ export function createScheduledReminderDispatcher(
   return async (controller, runtime) => {
     if (!runtime.config.reminders.smsEnabled) return;
     const clock = options.now ?? (() => new Date());
-    const planningTime = clock();
     const database = runtime.env.DB;
-    await (options.plan ?? planReminders)(database, { now: planningTime });
     const transport = (options.createTransport ?? createTextbeltTransport)({
+      apiKey: runtime.config.secrets.textbeltApiKey,
       timeoutMilliseconds: runtime.config.reminders.providerTimeoutMilliseconds,
     });
-    await (options.createDispatcher ?? createReminderDispatcher)(
+    const dispatcher = (options.createDispatcher ?? createReminderDispatcher)(
       database,
       transport,
-    ).dispatch({
-      // Planning can involve multiple D1 round trips. Start the lease from a
-      // fresh timestamp immediately before claiming dispatch work.
-      now: clock(),
-      leaseOwner: `cron:${controller.scheduledTime}:${options.randomId?.() ?? crypto.randomUUID()}`,
-      batchSize: runtime.config.reminders.batchSize,
-      leaseMilliseconds: runtime.config.reminders.leaseMilliseconds,
-      providerTimeoutMilliseconds:
-        runtime.config.reminders.providerTimeoutMilliseconds,
-    });
+    );
+    const dispatch = (stage: "queued" | "planned") =>
+      dispatcher.dispatch({
+        now: clock(),
+        leaseOwner: `cron:${controller.scheduledTime}:${stage}:${options.randomId?.() ?? crypto.randomUUID()}`,
+        batchSize: runtime.config.reminders.batchSize,
+        leaseMilliseconds: runtime.config.reminders.leaseMilliseconds,
+        providerTimeoutMilliseconds:
+          runtime.config.reminders.providerTimeoutMilliseconds,
+      });
+
+    // Durable due work must not wait behind potentially expensive planning.
+    await dispatch("queued");
+    await (options.plan ?? planReminders)(database, { now: clock() });
+    await dispatch("planned");
   };
 }
 

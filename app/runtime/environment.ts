@@ -37,6 +37,7 @@ export const secretBindingNames = [
   "BETTER_AUTH_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
+  "TEXTBELT_API_KEY",
 ] as const;
 
 export interface PlainEnvironmentBindings {
@@ -59,6 +60,7 @@ export interface SecretEnvironmentBindings {
   BETTER_AUTH_SECRET: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  TEXTBELT_API_KEY: string;
 }
 
 export interface AppEnvironment
@@ -80,6 +82,7 @@ export interface RuntimeConfig {
     betterAuthSecret: string;
     googleClientId: string;
     googleClientSecret: string;
+    textbeltApiKey: string;
   };
 }
 
@@ -339,6 +342,11 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
     "GOOGLE_CLIENT_SECRET",
     invalidBindings,
   );
+  const textbeltApiKey = requiredString(
+    raw,
+    "TEXTBELT_API_KEY",
+    invalidBindings,
+  );
   if (betterAuthSecret && betterAuthSecret.length < 32) {
     invalidBindings.push("BETTER_AUTH_SECRET");
   }
@@ -354,6 +362,7 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
       ["BETTER_AUTH_SECRET", betterAuthSecret],
       ["GOOGLE_CLIENT_ID", googleClientId],
       ["GOOGLE_CLIENT_SECRET", googleClientSecret],
+      ["TEXTBELT_API_KEY", textbeltApiKey],
     ] as const) {
       if (!isSafeProductionSecret(value)) invalidBindings.push(name);
     }
@@ -385,6 +394,7 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
       betterAuthSecret,
       googleClientId,
       googleClientSecret,
+      textbeltApiKey,
     },
   };
 }

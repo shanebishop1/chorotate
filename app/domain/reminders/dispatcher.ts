@@ -95,7 +95,7 @@ function periodLabel(localPeriodStart: string): string {
       day: "numeric",
       timeZone: "UTC",
     }).format(date);
-  return `${format(start)} to ${format(end)}, ${end.getUTCFullYear()} inclusive`;
+  return `${format(start)} to ${format(end)}`;
 }
 
 export function buildReminderSms(input: {
@@ -103,7 +103,7 @@ export function buildReminderSms(input: {
   choreName: string;
   localPeriodStart: string;
 }): string {
-  const message = `ChoRotate ${input.phase} reminder: ${input.choreName}, ${periodLabel(input.localPeriodStart)}. Reply STOP to opt out.`;
+  const message = `You're on ${input.choreName} this week- ${periodLabel(input.localPeriodStart)}`;
   assertSingleSegmentGsm7(message);
   return message;
 }

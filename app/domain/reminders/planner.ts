@@ -1,6 +1,7 @@
 import type { D1DatabaseLike } from "../storage/d1";
 
 const localDateFormatter = new Map<string, Intl.DateTimeFormat>();
+const PLANNING_HORIZON_DAYS = 14;
 
 type DecimalDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 type ReminderHour =
@@ -19,7 +20,6 @@ interface PlannedAssignmentRow {
   local_period_start: string;
   chore_id: string;
   time_zone: string;
-  reminder_evening_local_time: ReminderLocalTime;
   reminder_morning_local_time: ReminderLocalTime;
   local_today: string;
   sms_phone_e164: string | null;
@@ -358,47 +358,55 @@ export async function planReminders(
   if (!Number.isFinite(input.now.getTime())) {
     throw new RangeError("Invalid clock");
   }
+  const now = input.now.toISOString();
+  await database
+    .prepare(
+      `UPDATE reminder_outbox
+       SET status = 'failed', sanitized_error_category = 'occurrence_disabled',
+           lease_owner = NULL, lease_expires_at = NULL, terminal_at = ?
+       WHERE occurrence_phase = 'evening'
+         AND (status = 'pending' OR
+              (status = 'leased' AND lease_expires_at <= ?))`,
+    )
+    .bind(now, now)
+    .run();
   const households = await database
     .prepare(
-      `SELECT id,time_zone,reminder_evening_local_time,
-              reminder_morning_local_time
+      `SELECT id,time_zone,reminder_morning_local_time
        FROM households ORDER BY id`,
     )
     .all<{
       id: string;
       time_zone: string;
-      reminder_evening_local_time: string;
       reminder_morning_local_time: string;
     }>();
   const assignments: PlannedAssignmentRow[] = [];
   for (const household of households.results) {
     const localToday = localDateAt(input.now, household.time_zone);
+    const planningThrough = addLocalDays(localToday, PLANNING_HORIZON_DAYS);
     const result = await database
       .prepare(
         `SELECT assignment.id,assignment.household_id,
                 assignment.version AS assignment_version,
-                assignment.member_id,assignment.local_period_start,
-                assignment.chore_id,household.time_zone,
-                household.reminder_evening_local_time,
-                household.reminder_morning_local_time,
+                 assignment.member_id,assignment.local_period_start,
+                 assignment.chore_id,household.time_zone,
+                 household.reminder_morning_local_time,
                 member.sms_phone_e164,member.sms_consent_status,
                 member.sms_suppression_status,? AS local_today
          FROM weekly_assignments AS assignment
          JOIN households AS household ON household.id = assignment.household_id
          JOIN members AS member ON member.id = assignment.member_id
                               AND member.household_id = assignment.household_id
-         WHERE assignment.household_id = ?
-           AND date(assignment.local_period_start, '+6 days') >= ?
-         ORDER BY assignment.local_period_start,assignment.chore_id,assignment.id`,
+          WHERE assignment.household_id = ?
+            AND date(assignment.local_period_start, '+6 days') >= ?
+            AND assignment.local_period_start <= ?
+          ORDER BY assignment.local_period_start,assignment.chore_id,assignment.id`,
       )
-      .bind(localToday, household.id, localToday)
+      .bind(localToday, household.id, localToday, planningThrough)
       .all<PlannedAssignmentRow>();
     assignments.push(
       ...result.results.map((assignment) => ({
         ...assignment,
-        reminder_evening_local_time: parseReminderLocalTime(
-          assignment.reminder_evening_local_time,
-        ),
         reminder_morning_local_time: parseReminderLocalTime(
           assignment.reminder_morning_local_time,
         ),
@@ -406,41 +414,30 @@ export async function planReminders(
     );
   }
 
-  const now = input.now.toISOString();
   for (const assignment of assignments) {
     const contactFailureCategory = contactFailure(assignment);
-    for (const phase of ["evening", "morning"] as const) {
-      const occurrenceDate = addLocalDays(
-        assignment.local_period_start,
-        phase === "evening" ? -1 : 0,
-      );
-      const blocked = await reconcilePhase(database, assignment, phase, now);
-      if (blocked) continue;
+    const phase = "morning";
+    const blocked = await reconcilePhase(database, assignment, phase, now);
+    if (blocked) continue;
 
-      if (occurrenceDate < assignment.local_today) {
-        await expireMissedOccurrence(database, assignment, phase, now);
-      }
-
-      const localTime =
-        phase === "evening"
-          ? assignment.reminder_evening_local_time
-          : assignment.reminder_morning_local_time;
-      await insertOccurrence(
-        database,
-        assignment,
-        phase,
-        occurrenceInstant(
-          assignment.local_period_start,
-          phase,
-          localTime,
-          assignment.time_zone,
-        ),
-        now,
-        occurrenceDate < assignment.local_today
-          ? "missed_occurrence"
-          : contactFailureCategory,
-      );
+    if (assignment.local_period_start < assignment.local_today) {
+      await expireMissedOccurrence(database, assignment, phase, now);
     }
+    await insertOccurrence(
+      database,
+      assignment,
+      phase,
+      occurrenceInstant(
+        assignment.local_period_start,
+        phase,
+        assignment.reminder_morning_local_time,
+        assignment.time_zone,
+      ),
+      now,
+      assignment.local_period_start < assignment.local_today
+        ? "missed_occurrence"
+        : contactFailureCategory,
+    );
   }
   return { assignmentsConsidered: assignments.length };
 }

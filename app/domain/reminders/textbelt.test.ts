@@ -4,7 +4,6 @@ import {
   assertSingleSegmentGsm7,
   createTextbeltTransport,
   gsm7SeptetLength,
-  TEXTBELT_PUBLIC_KEY,
   TEXTBELT_SMS_ENDPOINT,
 } from "./textbelt";
 
@@ -19,7 +18,7 @@ describe("Textbelt transport contract", () => {
     expect(() => assertSingleSegmentGsm7("ChoRotate 😀")).toThrow(/GSM-7/i);
   });
 
-  it("posts the fixed public-key SMS contract without an authorization header", async () => {
+  it("posts the configured private-key SMS contract without an authorization header", async () => {
     const requests: Request[] = [];
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       requests.push(new Request(input, init));
@@ -31,6 +30,7 @@ describe("Textbelt transport contract", () => {
     });
     const transport = createTextbeltTransport({
       fetch,
+      apiKey: "private-textbelt-key",
       timeoutMilliseconds: 10_000,
     });
 
@@ -39,7 +39,6 @@ describe("Textbelt transport contract", () => {
     ).resolves.toEqual({ success: true, quotaRemaining: 0, textId: 42 });
 
     expect(TEXTBELT_SMS_ENDPOINT).toBe("https://textbelt.com/text");
-    expect(TEXTBELT_PUBLIC_KEY).toBe("textbelt");
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
     expect(request.url).toBe(TEXTBELT_SMS_ENDPOINT);
@@ -49,7 +48,7 @@ describe("Textbelt transport contract", () => {
     await expect(request.json()).resolves.toEqual({
       phone: phoneFromD1,
       message,
-      key: TEXTBELT_PUBLIC_KEY,
+      key: "private-textbelt-key",
     });
   });
 
@@ -68,6 +67,7 @@ describe("Textbelt transport contract", () => {
     ];
     const transport = createTextbeltTransport({
       fetch: async () => responses.shift()!,
+      apiKey: "private-textbelt-key",
       timeoutMilliseconds: 10_000,
     });
 
@@ -90,21 +90,26 @@ describe("Textbelt transport contract", () => {
   it("rejects malformed provider responses with a sanitized boundary error", async () => {
     const transport = createTextbeltTransport({
       fetch: async () => Response.json({ success: true, private: message }),
+      apiKey: "private-textbelt-key",
       timeoutMilliseconds: 10_000,
     });
 
     await expect(
       transport.send({ phone: phoneFromD1, message }),
     ).rejects.toThrow("Invalid Textbelt response");
-    expect(() => createTextbeltTransport({ timeoutMilliseconds: 999 })).toThrow(
-      "Textbelt timeout must be from 1000 to 30000 milliseconds",
-    );
+    expect(() =>
+      createTextbeltTransport({
+        apiKey: "private-textbelt-key",
+        timeoutMilliseconds: 999,
+      }),
+    ).toThrow("Textbelt timeout must be from 1000 to 30000 milliseconds");
   });
 
   it("validates content before initiating fetch", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const transport = createTextbeltTransport({
       fetch,
+      apiKey: "private-textbelt-key",
       timeoutMilliseconds: 10_000,
     });
 
@@ -122,6 +127,7 @@ describe("Textbelt transport contract", () => {
             reject(new DOMException("private", "AbortError")),
           );
         }),
+      apiKey: "private-textbelt-key",
       timeoutMilliseconds: 1_000,
     });
 
