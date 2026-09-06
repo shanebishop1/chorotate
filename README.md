@@ -1,7 +1,7 @@
 # ChoRotate
 
 <p align="center">
-  <a href="https://github.com/shanebishop1/chorotate/actions/workflows/ci.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/shanebishop1/chorotate/ci.yml?branch=main&amp;style=flat-square&amp;label=build" /></a>
+  <a href="https://github.com/shanebishop1/chorotate/actions/workflows/ci.yml"><img alt="CI and tests" src="https://github.com/shanebishop1/chorotate/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" /></a>
   <a href="https://nodejs.org/en/download"><img alt="Node.js 24.20.0" src="https://img.shields.io/badge/node-24.20.0-339933?style=flat-square&amp;logo=node.js&amp;logoColor=white" /></a>
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript 5.9.3" src="https://img.shields.io/badge/TypeScript-5.9.3-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" /></a>
 </p>
