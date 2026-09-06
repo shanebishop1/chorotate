@@ -3,8 +3,6 @@
   "printWidth": 80,
   "sortPackageJson": false,
   "ignorePatterns": [
-    ".beads/**",
-    ".exaskill/**",
     ".react-router/**",
     "build/**",
     "docs/**",

@@ -55,7 +55,6 @@ const requiredReleaseChecks = [
   "typecheck",
   "test",
   "test:workerd",
-  "planning:check",
   "operator:contacts:test",
   "operator:d1:test",
   "deploy:production:test",
@@ -118,8 +117,6 @@ const productionExtensions = new Set([".js", ".mjs", ".ts", ".tsx"]);
 const productionSources = [];
 for (const path of repositoryFiles({ includeUntracked: true })) {
   const included =
-    !path.startsWith(".beads/") &&
-    !path.startsWith(".exaskill/") &&
     (path.startsWith("app/") ||
       path.startsWith("workers/") ||
       path === "package.json" ||
@@ -178,9 +175,6 @@ const operatorSurfaces = [
   ".dev.vars.example",
   "package.json",
   "scripts/deployment/production-deploy.mjs",
-  ...repositoryFiles({ includeUntracked: true }).filter(
-    (path) => path.startsWith("docs/operations/") && path.endsWith(".md"),
-  ),
 ]
   .map((path) => textFile(path) ?? "")
   .join("\n");

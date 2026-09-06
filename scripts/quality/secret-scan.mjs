@@ -13,7 +13,6 @@ const signatures = [
 
 const findings = [];
 for (const path of repositoryFiles({ includeUntracked: true })) {
-  if (path.startsWith(".beads/") || path.startsWith(".exaskill/")) continue;
   const text = textFile(path);
   if (text === null) continue;
   for (const [name, pattern] of signatures) {
