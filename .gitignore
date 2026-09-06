@@ -15,4 +15,3 @@
 .chorotate/
 !.dev.vars.example
 !.env.example
-docs/
