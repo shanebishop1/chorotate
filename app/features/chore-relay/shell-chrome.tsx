@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useFetcher } from "react-router";
 
 import type { AuthorizedMember } from "../../auth/access";
-import type { HomeActionData } from "../../routes/home";
+import type { HomeActionData } from "../../routes/home-action";
 import { views, type ChoreRelayView } from "./model";
 import { Icon, Person, toProjected } from "./shared-presentation";
 import type { ChoreRelayProps, Theme } from "./types";

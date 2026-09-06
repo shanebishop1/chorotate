@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
 import type { ProjectedAssignment } from "../../domain/read-models";
-import type { HomeActionData } from "../../routes/home";
+import type { HomeActionData } from "../../routes/home-action";
 import type { ChoreRelayView } from "./model";
 import { ChangeDialog } from "./change-dialog";
 import { ReadyView } from "./views";

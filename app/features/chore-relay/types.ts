@@ -8,7 +8,7 @@ import type {
   getHouseholdList,
   getPersonalAgenda,
 } from "../../domain/read-models";
-import type { HomeActionData } from "../../routes/home";
+import type { HomeActionData } from "../../routes/home-action";
 import type { ChoreRelayView, HouseholdRange } from "./model";
 
 export interface ChoreRelayData {

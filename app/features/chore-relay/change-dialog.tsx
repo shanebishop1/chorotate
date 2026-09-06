@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 
-import type { HomeActionData } from "../../routes/home";
+import type { HomeActionData } from "../../routes/home-action";
 import type {
   ProjectedAssignment,
   ProjectedMember,

@@ -16,9 +16,9 @@ import type { RuntimeConfig } from "../runtime/environment";
 import {
   householdUpcomingWindow,
   loadHomeData,
-  runHomeAction,
   shouldRevalidate,
 } from "./home";
+import { runHomeAction } from "./home-action";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const actor: AuthorizedMember = {
