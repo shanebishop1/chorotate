@@ -1,14 +1,18 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+
+const milestonePath = "docs/milestones/mvp/INDEX.md";
+const indexPath = "docs/epics/chorotate/core-experience/prds/INDEX.md";
+if (!existsSync(milestonePath) || !existsSync(indexPath)) {
+  console.log("Planning consistency skipped: local docs are not checked in.");
+  process.exit(0);
+}
 
 const expected = Array.from(
   { length: 11 },
   (_, index) => `SC-${String(index + 1).padStart(2, "0")}`,
 );
-const milestone = readFileSync("docs/milestones/mvp/INDEX.md", "utf8");
-const index = readFileSync(
-  "docs/epics/chorotate/core-experience/prds/INDEX.md",
-  "utf8",
-);
+const milestone = readFileSync(milestonePath, "utf8");
+const index = readFileSync(indexPath, "utf8");
 const issues = readFileSync(".beads/issues.jsonl", "utf8")
   .split("\n")
   .filter(Boolean)
