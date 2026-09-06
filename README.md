@@ -45,7 +45,7 @@ Install Chromium once with `npm run test:browser:install` if Playwright requests
 
 Household display name, ordered member IDs/display names, exact member emails, D1-only E.164 contacts/consent/suppression state, household timezone and reminder times, deployment domain, Google credentials, Better Auth secret, Textbelt API key, and Cloudflare D1 binding are operator-supplied deployment inputs. A fresh production D1 database must use the private first-run `operator:bootstrap:prepare` workflow after migrations; later identity/contact changes use `operator:contacts:prepare`. Production deploys start with `PRODUCTION_REMINDER_SMS_ENABLED=false`, which makes Cron return before planning or transport construction; enabling one smoke or recurring reminders requires separate explicit approval. See the [security contract](docs/operations/security.md), [operator runbook](docs/operations/operator-runbook.md), and [acceptance-evidence matrix](docs/operations/mvp-acceptance-evidence.md).
 
-`npm run deploy` is intentionally blocked. Production dry-runs and deployments use the named Wrangler `production` environment through the validated scripts documented in the operator runbook.
+`npm run deploy` is intentionally blocked. Production dry-runs and deployments use the named Wrangler `production` environment through the validated scripts documented in the operator runbook. Set the existing `CHOROTATE_CF_API_TOKEN` environment variable for Cloudflare access; the production deploy, D1 operator, and D1 verification scripts automatically map it to Wrangler's `CLOUDFLARE_API_TOKEN` name. A directly supplied `CLOUDFLARE_API_TOKEN` takes precedence.
 
 ## Household onboarding
 

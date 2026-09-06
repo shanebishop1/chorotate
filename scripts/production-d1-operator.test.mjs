@@ -281,6 +281,14 @@ test("redacts private boundaries and disables Wrangler disk logs", () => {
   assert.equal(environment.PRODUCTION_D1_DATABASE_ID, undefined);
 });
 
+test("maps the project Cloudflare token name for Wrangler", () => {
+  const environment = productionWranglerEnvironment({
+    CHOROTATE_CF_API_TOKEN: "project-token",
+  });
+  assert.equal(environment.CLOUDFLARE_API_TOKEN, "project-token");
+  assert.equal(environment.CHOROTATE_CF_API_TOKEN, undefined);
+});
+
 test("credential-free dry-runs and refusals make no remote request", () => {
   const verify = spawnSync(
     process.execPath,

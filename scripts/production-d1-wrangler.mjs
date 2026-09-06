@@ -62,8 +62,14 @@ export async function withTemporaryWranglerConfig(config, operation) {
 /** @param {NodeJS.ProcessEnv} environment */
 export function productionWranglerEnvironment(environment) {
   /** @type {NodeJS.ProcessEnv} */
-  const safeEnvironment = { ...environment, WRANGLER_WRITE_LOGS: "false" };
+  const safeEnvironment = {
+    ...environment,
+    CLOUDFLARE_API_TOKEN:
+      environment.CLOUDFLARE_API_TOKEN ?? environment.CHOROTATE_CF_API_TOKEN,
+    WRANGLER_WRITE_LOGS: "false",
+  };
   delete safeEnvironment.PRODUCTION_D1_DATABASE_ID;
+  delete safeEnvironment.CHOROTATE_CF_API_TOKEN;
   return safeEnvironment;
 }
 
