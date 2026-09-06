@@ -6,21 +6,23 @@ import {
   expectedProductionD1Result,
   parseProductionD1VerificationOutput,
   productionD1SettingsFromEnvironment,
-} from "./production-d1-contract.mjs";
+} from "../deployment/production-d1-contract.mjs";
 import {
   buildProductionD1OperatorConfig,
   buildProductionD1WranglerArgs,
   productionD1DatabaseIdFromEnvironment,
   productionWranglerEnvironment,
   withTemporaryWranglerConfig,
-} from "./production-d1-wrangler.mjs";
+} from "../deployment/production-d1-wrangler.mjs";
 
 const dryRun = process.argv.includes("--dry-run");
 const unexpectedArgs = process.argv
   .slice(2)
   .filter((argument) => argument !== "--dry-run");
 if (unexpectedArgs.length > 0) {
-  console.error("Usage: node scripts/verify-production-d1.mjs [--dry-run]");
+  console.error(
+    "Usage: node scripts/operator/verify-production-d1.mjs [--dry-run]",
+  );
   process.exit(1);
 }
 

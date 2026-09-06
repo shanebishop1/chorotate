@@ -5,7 +5,7 @@ import {
   buildBootstrapSql,
   buildContactSql,
   validateContactInput,
-} from "./scripts/operator-contact-config.mjs";
+} from "./scripts/operator/operator-contact-config.mjs";
 
 const migrations = await readD1Migrations("./migrations");
 const operatorInput = validateContactInput({

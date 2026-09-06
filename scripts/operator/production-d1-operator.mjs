@@ -10,11 +10,13 @@ import {
   productionWranglerEnvironment,
   redactPrivateValues,
   withTemporaryWranglerConfig,
-} from "./production-d1-wrangler.mjs";
+} from "../deployment/production-d1-wrangler.mjs";
 
-const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const repositoryRoot = resolve(
+  fileURLToPath(new URL("../..", import.meta.url)),
+);
 const usage =
-  "Usage: node scripts/production-d1-operator.mjs migrations-list | migrations-apply | execute --file <private-sql-path>";
+  "Usage: node scripts/operator/production-d1-operator.mjs migrations-list | migrations-apply | execute --file <private-sql-path>";
 
 /** @param {string} directory @param {string} path */
 function outsideDirectory(directory, path) {

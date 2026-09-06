@@ -15,7 +15,7 @@ try {
     [
       "generate",
       "--config",
-      "scripts/better-auth-schema.ts",
+      "scripts/auth/better-auth-schema.ts",
       "--output",
       generatedPath,
       "--adapter",

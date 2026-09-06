@@ -26,7 +26,7 @@ import {
 import {
   buildProductionD1VerificationQuery,
   expectedProductionD1Result,
-} from "./production-d1-contract.mjs";
+} from "../deployment/production-d1-contract.mjs";
 
 const validInput = {
   householdId: "chorotate",
@@ -520,7 +520,7 @@ test("CLI writes a new mode-0600 bootstrap without exposing values", () => {
     spawnSync(
       process.execPath,
       [
-        resolve("scripts/operator-contact-config.mjs"),
+        resolve("scripts/operator/operator-contact-config.mjs"),
         "--bootstrap",
         "--input",
         inputPath,
@@ -571,7 +571,7 @@ test("CLI accepts only outside-repository or ignored .chorotate private paths", 
     const result = spawnSync(
       process.execPath,
       [
-        resolve("scripts/operator-contact-config.mjs"),
+        resolve("scripts/operator/operator-contact-config.mjs"),
         "--input",
         inputPath,
         "--output",
@@ -587,7 +587,7 @@ test("CLI accepts only outside-repository or ignored .chorotate private paths", 
     const exclusive = spawnSync(
       process.execPath,
       [
-        resolve("scripts/operator-contact-config.mjs"),
+        resolve("scripts/operator/operator-contact-config.mjs"),
         "--input",
         inputPath,
         "--output",

@@ -21,7 +21,7 @@ import {
   expectedProductionD1Result,
   parseProductionD1VerificationOutput,
   productionD1SettingsFromEnvironment,
-} from "./production-d1-contract.mjs";
+} from "../deployment/production-d1-contract.mjs";
 import {
   buildProductionD1OperatorConfig,
   buildProductionD1WranglerArgs,
@@ -29,7 +29,7 @@ import {
   productionWranglerEnvironment,
   redactPrivateValues,
   withTemporaryWranglerConfig,
-} from "./production-d1-wrangler.mjs";
+} from "../deployment/production-d1-wrangler.mjs";
 
 const databaseId = "12345678-1234-4123-8123-123456789abc";
 
@@ -292,7 +292,7 @@ test("maps the project Cloudflare token name for Wrangler", () => {
 test("credential-free dry-runs and refusals make no remote request", () => {
   const verify = spawnSync(
     process.execPath,
-    [resolve("scripts/verify-production-d1.mjs"), "--dry-run"],
+    [resolve("scripts/operator/verify-production-d1.mjs"), "--dry-run"],
     { encoding: "utf8", env: {} },
   );
   assert.equal(verify.status, 0, verify.stderr);
@@ -300,7 +300,7 @@ test("credential-free dry-runs and refusals make no remote request", () => {
 
   const refused = spawnSync(
     process.execPath,
-    [resolve("scripts/production-d1-operator.mjs"), "deploy"],
+    [resolve("scripts/operator/production-d1-operator.mjs"), "deploy"],
     { encoding: "utf8", env: { PRODUCTION_D1_DATABASE_ID: databaseId } },
   );
   assert.notEqual(refused.status, 0);

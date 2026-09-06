@@ -17,9 +17,11 @@ const packageJson = JSON.parse(read("package.json"));
 const lock = JSON.parse(read("package-lock.json"));
 const ci = read(".github/workflows/ci.yml");
 const environment = read("app/runtime/environment.ts");
-const productionDeploy = read("scripts/production-deploy.mjs");
-const productionDeployOutput = read("scripts/production-deploy-output.mjs");
-const releaseGate = read("scripts/release-gate.mjs");
+const productionDeploy = read("scripts/deployment/production-deploy.mjs");
+const productionDeployOutput = read(
+  "scripts/deployment/production-deploy-output.mjs",
+);
+const releaseGate = read("scripts/quality/release-gate.mjs");
 const textbelt = read("app/domain/reminders/textbelt.ts");
 const workerBindings = read("worker-configuration.d.ts");
 
@@ -123,7 +125,7 @@ for (const path of repositoryFiles({ includeUntracked: true })) {
       path === "package.json" ||
       path === "wrangler.jsonc" ||
       path === ".dev.vars.example" ||
-      path === "scripts/production-deploy.mjs") &&
+      path === "scripts/deployment/production-deploy.mjs") &&
     (productionExtensions.has(extname(path)) ||
       ["package.json", "wrangler.jsonc", ".dev.vars.example"].includes(path)) &&
     !path.includes(".test.") &&
@@ -160,9 +162,10 @@ const scriptConfigurationContract = repositoryFiles({ includeUntracked: true })
     (path) =>
       path.startsWith("scripts/") &&
       path.endsWith(".mjs") &&
-      !["scripts/quality-contracts.mjs", "scripts/secret-scan.mjs"].includes(
-        path,
-      ),
+      ![
+        "scripts/quality/quality-contracts.mjs",
+        "scripts/quality/secret-scan.mjs",
+      ].includes(path),
   )
   .map((path) => textFile(path) ?? "")
   .join("\n");
@@ -174,7 +177,7 @@ const operatorSurfaces = [
   "README.md",
   ".dev.vars.example",
   "package.json",
-  "scripts/production-deploy.mjs",
+  "scripts/deployment/production-deploy.mjs",
   ...repositoryFiles({ includeUntracked: true }).filter(
     (path) => path.startsWith("docs/operations/") && path.endsWith(".md"),
   ),
@@ -206,8 +209,10 @@ check(
   "contacts are not runtime or deploy environment inputs",
   !/(?:PHONE|E164|CONTACT)/.test(environmentContract),
 );
-const operatorContactTool = read("scripts/operator-contact-config.mjs");
-const remoteD1Verification = `${read("scripts/verify-production-d1.mjs")}\n${read("scripts/production-d1-contract.mjs")}\n${read("scripts/production-d1-wrangler.mjs")}`;
+const operatorContactTool = read(
+  "scripts/operator/operator-contact-config.mjs",
+);
+const remoteD1Verification = `${read("scripts/operator/verify-production-d1.mjs")}\n${read("scripts/deployment/production-d1-contract.mjs")}\n${read("scripts/deployment/production-d1-wrangler.mjs")}`;
 const scheduledReminders = read("app/domain/reminders/scheduled.ts");
 check(
   "operator contact preparation restricts private files to safe locations",
@@ -221,7 +226,7 @@ check(
 check(
   "fresh production bootstrap is explicit, complete, and assignment-safe",
   packageJson.scripts?.["operator:bootstrap:prepare"] ===
-    "node scripts/operator-contact-config.mjs --bootstrap" &&
+    "node scripts/operator/operator-contact-config.mjs --bootstrap" &&
     /buildBootstrapSql/.test(operatorContactTool) &&
     /operator_bootstrap_assert/.test(operatorContactTool) &&
     /CREATE TABLE operator_bootstrap_assert/.test(operatorContactTool) &&
@@ -282,7 +287,8 @@ const contactSourceFindings = productionSources
   .filter(
     (path) =>
       ![
-        "app/domain/read-models/index.ts",
+        "app/domain/read-models/history.ts",
+        "app/domain/read-models/schedule.ts",
         "app/domain/reminders/dispatcher.ts",
         "app/domain/reminders/planner.ts",
       ].includes(path),

@@ -223,7 +223,7 @@ try {
         CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath,
       });
       const repositoryRoot = resolve(
-        fileURLToPath(new URL("..", import.meta.url)),
+        fileURLToPath(new URL("../..", import.meta.url)),
       );
       await runWithSuppressedChildOutput("npm", ["run", "build"], {
         cwd: repositoryRoot,

@@ -21,7 +21,7 @@ const sensitiveProviderOutput = [
   '{"providerPayload":{"identity":"arbitrary private detail"}}',
 ];
 const deployOutputModule = pathToFileURL(
-  resolve("scripts/production-deploy-output.mjs"),
+  resolve("scripts/deployment/production-deploy-output.mjs"),
 ).href;
 
 /** @param {string} source */

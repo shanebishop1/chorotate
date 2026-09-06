@@ -39,7 +39,7 @@
   "upload_source_maps": true,
   "env": {
     // Production values and the D1 database id are injected into a temporary
-    // config by scripts/production-deploy.mjs. No production resource id or
+    // config by scripts/deployment/production-deploy.mjs. No production resource id or
     // operator value belongs in this file.
     "production": {
       "name": "chorotate-production",

@@ -26,7 +26,9 @@ const weekdays = new Map([
   ["saturday", 6],
 ]);
 const localTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const repositoryRoot = resolve(
+  fileURLToPath(new URL("../..", import.meta.url)),
+);
 
 /** @param {unknown} input */
 export function validateContactInput(input) {
@@ -373,8 +375,8 @@ async function main() {
   ) {
     throw new Error(
       bootstrap
-        ? "Usage: node scripts/operator-contact-config.mjs --bootstrap --input <private-json-path> --output <new-private-sql-path> --time-zone <iana-zone> --week-start <weekday> --evening-time <HH:mm> --morning-time <HH:mm>"
-        : "Usage: node scripts/operator-contact-config.mjs --input <private-json-path> --output <new-private-sql-path>",
+        ? "Usage: node scripts/operator/operator-contact-config.mjs --bootstrap --input <private-json-path> --output <new-private-sql-path> --time-zone <iana-zone> --week-start <weekday> --evening-time <HH:mm> --morning-time <HH:mm>"
+        : "Usage: node scripts/operator/operator-contact-config.mjs --input <private-json-path> --output <new-private-sql-path>",
     );
   }
   const inputPath = await realpath(resolve(args[inputIndex + 1]));
