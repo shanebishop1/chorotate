@@ -14,6 +14,7 @@ describe("repository secret contract", () => {
       "BETTER_AUTH_SECRET",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
+      "TEXTBELT_API_KEY",
     ]);
     expect(isAllowedSecretName("UNREVIEWED_SECRET")).toBe(false);
   });
