@@ -7,15 +7,15 @@ ChoRotate lets you and your roommates track chores on a shared calendar and get 
 <table>
   <tr>
     <td align="center" valign="top">
-      <img src="IMG_8246.PNG" width="240" alt="ChoRotate current duty view" /><br />
+      <img src="IMG_8246.PNG" width="240" height="487" alt="ChoRotate current duty view" /><br />
       See the household's current assignments and next rotation.
     </td>
     <td align="center" valign="top">
-      <img src="IMG_8247.PNG" width="240" alt="ChoRotate upcoming chores view" /><br />
+      <img src="IMG_8247.PNG" width="240" height="487" alt="ChoRotate upcoming chores view" /><br />
       See your upcoming chores and scheduled reminders.
     </td>
     <td align="center" valign="top">
-      <img src="IMG_8248.PNG" width="240" alt="ChoRotate household schedule view" /><br />
+      <img src="IMG_8248.PNG" width="240" height="487" alt="ChoRotate household schedule view" /><br />
       Review the full household schedule and swap turns.
     </td>
   </tr>
