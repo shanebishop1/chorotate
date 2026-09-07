@@ -10,21 +10,14 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { choreConfigForInput, weekdays } from "./chore-config.mjs";
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const memberIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const maximumRosterSize = 50;
 const e164Pattern = /^\+[1-9]\d{1,14}$/;
 const consentStatuses = new Set(["not_recorded", "consented", "revoked"]);
 const suppressionStatuses = new Set(["not_suppressed", "suppressed"]);
-const weekdays = new Map([
-  ["sunday", 0],
-  ["monday", 1],
-  ["tuesday", 2],
-  ["wednesday", 3],
-  ["thursday", 4],
-  ["friday", 5],
-  ["saturday", 6],
-]);
 const localTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const repositoryRoot = resolve(
   fileURLToPath(new URL("../..", import.meta.url)),
@@ -40,7 +33,10 @@ export function validateContactInput(input) {
   const document = /** @type {Record<string, unknown>} */ (input);
   const documentKeys = Object.keys(document).sort();
   if (
-    documentKeys.join(",") !== "householdId,householdName,members,recordedAt" ||
+    ![
+      "householdId,householdName,members,recordedAt",
+      "chores,householdId,householdName,members,recordedAt",
+    ].includes(documentKeys.join(",")) ||
     document.householdId !== "chorotate"
   ) {
     failures.push("document contract");
@@ -144,12 +140,22 @@ export function validateContactInput(input) {
       failures.push("suppression state");
     }
   }
+  if (document.chores !== undefined) {
+    try {
+      choreConfigForInput({
+        chores: document.chores,
+        members: /** @type {Array<{id: string}>} */ (members),
+      });
+    } catch {
+      failures.push("chore configuration");
+    }
+  }
   if (failures.length > 0) {
     throw new Error(
       `Invalid operator contact input: ${[...new Set(failures)].sort().join(", ")}`,
     );
   }
-  return /** @type {{householdId: string, householdName: string, recordedAt: string, members: Array<{id: string, displayName: string, email: string, phoneE164: string | null, consent: string, suppression: string}>}} */ (
+  return /** @type {{householdId: string, householdName: string, recordedAt: string, members: Array<{id: string, displayName: string, email: string, phoneE164: string | null, consent: string, suppression: string}>, chores?: unknown}} */ (
     input
   );
 }
@@ -310,11 +316,92 @@ function buildBootstrapSqlTemplate(input, settings) {
  * @param {ReturnType<typeof validateContactInput>} input
  * @param {unknown} settings
  */
+function buildConfiguredBootstrapSql(input, settings) {
+  const bootstrap = validateBootstrapSettings(settings);
+  const chores = choreConfigForInput(input);
+  const memberRows = input.members
+    .map(
+      (member) =>
+        `  (${sqlString(member.id)}, ${sqlString(input.householdId)}, ${sqlString(member.displayName)}, 1, ${sqlString(input.recordedAt)}, ${member.phoneE164 === null ? "NULL" : sqlString(member.phoneE164)}, ${sqlString(member.consent)}, ${sqlString(member.suppression)}, ${sqlString(input.recordedAt)})`,
+    )
+    .join(",\n");
+  const identityRows = input.members
+    .map(
+      (member) =>
+        `  (${sqlString(`identity-${member.id}`)}, ${sqlString(input.householdId)}, ${sqlString(member.id)}, ${sqlString(member.email)}, NULL, 1, ${sqlString(input.recordedAt)})`,
+    )
+    .join(",\n");
+  const choreRows = chores
+    .map(
+      (chore) =>
+        `  (${sqlString(chore.id)}, ${sqlString(input.householdId)}, ${sqlString(chore.name)}, 1, ${sqlString(input.recordedAt)}, ${sqlString(chore.instructions)}, ${chore.ownershipStartWeekdayNumber})`,
+    )
+    .join(",\n");
+  const rotationRows = chores
+    .map(
+      (chore) =>
+        `  (${sqlString(chore.rotation.id)}, ${sqlString(input.householdId)}, ${sqlString(chore.id)}, ${sqlString(chore.rotation.effectiveFrom)}, ${chore.rotation.offset}, ${sqlString(input.recordedAt)})`,
+    )
+    .join(",\n");
+  const rotationMemberRows = chores
+    .flatMap((chore) =>
+      chore.rotation.memberIds.map(
+        (memberId, position) =>
+          `  (${sqlString(input.householdId)}, ${sqlString(chore.rotation.id)}, ${sqlString(memberId)}, ${position})`,
+      ),
+    )
+    .join(",\n");
+
+  return `-- PRIVATE OPERATOR INPUT. Contains sensitive identity/contact data. Do not commit or log.
+-- First-run only: refuses any pre-existing ChoRotate production structure.
+PRAGMA foreign_keys = ON;
+CREATE TABLE operator_bootstrap_assert (existing_rows INTEGER CHECK (existing_rows = 0));
+INSERT INTO operator_bootstrap_assert
+SELECT
+  (SELECT count(*) FROM households WHERE id = ${sqlString(input.householdId)})
+  + (SELECT count(*) FROM members WHERE household_id = ${sqlString(input.householdId)})
+  + (SELECT count(*) FROM allowlisted_identities WHERE household_id = ${sqlString(input.householdId)})
+  + (SELECT count(*) FROM chores WHERE household_id = ${sqlString(input.householdId)})
+  + (SELECT count(*) FROM rotation_configs WHERE household_id = ${sqlString(input.householdId)});
+INSERT INTO households
+  (id,name,time_zone,week_start,created_at,reminder_evening_local_time,reminder_morning_local_time)
+VALUES
+  (${sqlString(input.householdId)}, ${sqlString(input.householdName)}, ${sqlString(bootstrap.timeZone)}, ${bootstrap.weekStartNumber}, ${sqlString(input.recordedAt)}, ${sqlString(bootstrap.eveningTime)}, ${sqlString(bootstrap.morningTime)});
+INSERT INTO members
+  (id,household_id,display_name,active,created_at,sms_phone_e164,sms_consent_status,sms_suppression_status,sms_contact_updated_at)
+VALUES
+${memberRows};
+INSERT INTO allowlisted_identities
+  (id,household_id,member_id,email_normalized,auth_user_id,active,created_at)
+VALUES
+${identityRows};
+INSERT INTO chores
+  (id,household_id,name,active,created_at,instructions,ownership_start_weekday)
+VALUES
+${choreRows};
+INSERT INTO rotation_configs
+  (id,household_id,chore_id,effective_from,rotation_offset,created_at)
+VALUES
+${rotationRows};
+INSERT INTO rotation_config_members
+  (household_id,rotation_config_id,member_id,position)
+VALUES
+${rotationMemberRows};
+DROP TABLE operator_bootstrap_assert;
+`;
+}
+
+/**
+ * @param {ReturnType<typeof validateContactInput>} input
+ * @param {unknown} settings
+ */
 export function buildBootstrapSql(input, settings) {
-  return buildBootstrapSqlTemplate(input, settings).replace(
-    `(${sqlString(input.householdId)}, 'ChoRotate',`,
-    `(${sqlString(input.householdId)}, ${sqlString(input.householdName)},`,
-  );
+  return input.chores === undefined
+    ? buildBootstrapSqlTemplate(input, settings).replace(
+        `(${sqlString(input.householdId)}, 'ChoRotate',`,
+        `(${sqlString(input.householdId)}, ${sqlString(input.householdName)},`,
+      )
+    : buildConfiguredBootstrapSql(input, settings);
 }
 
 /** @param {string} path */
@@ -341,6 +428,30 @@ function inLocalPrivateDirectory(path) {
 /** @param {string} path */
 function allowedPrivatePath(path) {
   return outsideRepository(path) || inLocalPrivateDirectory(path);
+}
+
+/** @param {string} path */
+export async function readOperatorInput(path) {
+  const inputPath = await realpath(resolve(path));
+  if (!allowedPrivatePath(inputPath)) {
+    throw new Error(
+      "Operator input path must be outside the repository or under .chorotate",
+    );
+  }
+  const inputStat = await stat(inputPath);
+  if (!inputStat.isFile() || (inputStat.mode & 0o777) !== 0o600) {
+    throw new Error("Operator input must be a regular file with mode 0600");
+  }
+  try {
+    return validateContactInput(JSON.parse(await readFile(inputPath, "utf8")));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error("Operator input must contain valid JSON", {
+        cause: error,
+      });
+    }
+    throw error;
+  }
 }
 
 async function main() {
@@ -387,13 +498,7 @@ async function main() {
       "Operator input and output paths must be outside the repository or under .chorotate",
     );
   }
-  const inputStat = await stat(inputPath);
-  if (!inputStat.isFile() || (inputStat.mode & 0o777) !== 0o600) {
-    throw new Error("Operator input must be a regular file with mode 0600");
-  }
-  const input = validateContactInput(
-    JSON.parse(await readFile(inputPath, "utf8")),
-  );
+  const input = await readOperatorInput(inputPath);
   const sql = bootstrap
     ? buildBootstrapSql(input, {
         timeZone: args[timeZoneIndex + 1],

@@ -24,6 +24,7 @@ export const plainBindingNames = [
   "HOUSEHOLD_WEEK_START",
   "OWNER_EMAIL",
   "ALLOWED_EMAILS",
+  "LOCAL_AUTH_ENABLED",
   "REMINDER_SMS_ENABLED",
   "REMINDER_BATCH_SIZE",
   "REMINDER_LEASE_MILLISECONDS",
@@ -47,6 +48,7 @@ export interface PlainEnvironmentBindings {
   HOUSEHOLD_WEEK_START: string;
   OWNER_EMAIL: string;
   ALLOWED_EMAILS: string;
+  LOCAL_AUTH_ENABLED: string;
   REMINDER_SMS_ENABLED: string;
   REMINDER_BATCH_SIZE: string;
   REMINDER_LEASE_MILLISECONDS: string;
@@ -77,6 +79,7 @@ export interface RuntimeConfig {
     ownerEmail: string;
     allowedEmails: readonly string[];
   };
+  localAuthEnabled: boolean;
   reminders: ReminderRuntimeConfig;
   secrets: {
     betterAuthSecret: string;
@@ -271,11 +274,20 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
     invalidBindings.push("ALLOWED_EMAILS");
   }
 
+  const localAuthEnabled = booleanBinding(
+    raw,
+    "LOCAL_AUTH_ENABLED",
+    invalidBindings,
+  );
+
   const smsEnabled = booleanBinding(
     raw,
     "REMINDER_SMS_ENABLED",
     invalidBindings,
   );
+  if (localAuthEnabled && smsEnabled) {
+    invalidBindings.push("REMINDER_SMS_ENABLED");
+  }
   const batchSize = boundedIntegerBinding(
     raw,
     "REMINDER_BATCH_SIZE",
@@ -351,6 +363,10 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
     invalidBindings.push("BETTER_AUTH_SECRET");
   }
 
+  if (localAuthEnabled && applicationEnvironment !== "local") {
+    invalidBindings.push("LOCAL_AUTH_ENABLED");
+  }
+
   if (applicationEnvironment === "production") {
     if (
       ownerEmail.endsWith(".invalid") ||
@@ -381,6 +397,7 @@ export function parseRuntimeConfig(environment: AppEnvironment): RuntimeConfig {
       ownerEmail,
       allowedEmails,
     },
+    localAuthEnabled,
     reminders: {
       smsEnabled,
       batchSize,

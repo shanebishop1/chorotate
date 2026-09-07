@@ -237,7 +237,13 @@ function Fixture() {
   const search = new URLSearchParams(location.search);
   const view = normalizeView(search.get("view"));
   if (search.get("auth") === "unauthorized") {
-    return <ChoreRelayShell activeView={view} state="unauthorized" />;
+    return (
+      <ChoreRelayShell
+        activeView={view}
+        state="unauthorized"
+        localAuthAvailable={false}
+      />
+    );
   }
   const endedChore = search.get("ended");
   const endedAssignment = endedAssignments.find(
@@ -280,7 +286,14 @@ function Fixture() {
         },
       }
     : rangeData;
-  return <ChoreRelayShell activeView={view} state="ready" data={fixtureData} />;
+  return (
+    <ChoreRelayShell
+      activeView={view}
+      state="ready"
+      localAuthAvailable={false}
+      data={fixtureData}
+    />
+  );
 }
 
 const router = createBrowserRouter([

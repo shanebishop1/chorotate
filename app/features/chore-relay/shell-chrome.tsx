@@ -37,7 +37,10 @@ export function ShellChrome({
               <Icon name="brand" />
             </span>
             <h1>ChoRotate</h1>
-            <AuthControl kind="sign-in" />
+            <AuthControl
+              kind="sign-in"
+              localAuthAvailable={props.localAuthAvailable}
+            />
           </div>
         </main>
         <div className="sign-in-shutters" aria-hidden="true">
@@ -89,7 +92,10 @@ export function ShellChrome({
               </span>
             </button>
             {props.state === "ready" ? (
-              <ProfileMenu member={props.data.signedInMember} />
+              <ProfileMenu
+                member={props.data.signedInMember}
+                localAuthAvailable={props.localAuthAvailable}
+              />
             ) : null}
           </div>
         </div>
@@ -133,8 +139,10 @@ export function applyTheme(theme: Exclude<Theme, undefined>) {
 
 export function SystemState({
   kind,
+  localAuthAvailable = false,
 }: {
   kind: "unauthorized" | "unavailable" | "empty";
+  localAuthAvailable?: boolean;
 }) {
   const content =
     kind === "unauthorized"
@@ -159,7 +167,9 @@ export function SystemState({
       <div>
         <h1>{content[1]}</h1>
         {content[2] ? <p>{content[2]}</p> : null}
-        {kind === "unauthorized" ? <AuthControl kind="sign-in" /> : null}
+        {kind === "unauthorized" ? (
+          <AuthControl kind="sign-in" localAuthAvailable={localAuthAvailable} />
+        ) : null}
         {kind === "empty" ? <MaterializeControl /> : null}
       </div>
     </div>
@@ -192,7 +202,13 @@ function MaterializeControl() {
   );
 }
 
-function ProfileMenu({ member }: { member: AuthorizedMember }) {
+function ProfileMenu({
+  member,
+  localAuthAvailable,
+}: {
+  member: AuthorizedMember;
+  localAuthAvailable: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -229,24 +245,37 @@ function ProfileMenu({ member }: { member: AuthorizedMember }) {
       </button>
       <div className="profile-popover" id="profile-popover" hidden={!open}>
         <strong>{member.displayName}</strong>
-        <AuthControl kind="sign-out" />
+        <AuthControl kind="sign-out" localAuthAvailable={localAuthAvailable} />
       </div>
     </div>
   );
 }
 
-function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
+function AuthControl({
+  kind,
+  localAuthAvailable,
+}: {
+  kind: "sign-in" | "sign-out";
+  localAuthAvailable: boolean;
+}) {
   const [state, setState] = useState<"idle" | "pending" | "error">("idle");
   const signIn = kind === "sign-in";
+  const localAuth = localAuthAvailable;
+  const localSignIn = signIn && localAuth;
   async function submit() {
     setState("pending");
     try {
       const endpoint = signIn
-        ? "/api/auth/sign-in/social"
-        : "/api/auth/sign-out";
-      const body = signIn
-        ? { provider: "google", callbackURL: `${window.location.origin}/` }
-        : {};
+        ? localSignIn
+          ? "/api/auth/local"
+          : "/api/auth/sign-in/social"
+        : localAuth
+          ? "/api/auth/local/sign-out"
+          : "/api/auth/sign-out";
+      const body =
+        signIn && !localSignIn
+          ? { provider: "google", callbackURL: `${window.location.origin}/` }
+          : {};
       const response = await fetch(endpoint, {
         method: "POST",
         credentials: "same-origin",
@@ -254,7 +283,7 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Authentication request failed");
-      if (signIn) {
+      if (signIn && !localSignIn) {
         const payload: unknown = await response.json();
         if (
           typeof payload !== "object" ||
@@ -286,7 +315,7 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
         disabled={pending}
         aria-busy={pending}
       >
-        {signIn ? (
+        {signIn && !localSignIn ? (
           <svg
             className="google-mark"
             viewBox="0 0 24 24"
@@ -311,7 +340,11 @@ function AuthControl({ kind }: { kind: "sign-in" | "sign-out" }) {
             />
           </svg>
         ) : null}
-        {signIn ? "Sign in with Google" : "Sign out"}
+        {localSignIn
+          ? "Sign in locally"
+          : signIn
+            ? "Sign in with Google"
+            : "Sign out"}
       </button>
       <span aria-live="polite" className="auth-status">
         {state === "error"

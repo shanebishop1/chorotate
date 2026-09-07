@@ -28,9 +28,15 @@ export type ChoreRelayProps =
   | {
       activeView: ChoreRelayView;
       state: "unauthorized" | "unavailable";
+      localAuthAvailable: boolean;
       data?: never;
     }
-  | { activeView: ChoreRelayView; state: "ready"; data: ChoreRelayData };
+  | {
+      activeView: ChoreRelayView;
+      state: "ready";
+      localAuthAvailable: boolean;
+      data: ChoreRelayData;
+    };
 
 export type Theme = "light" | "dark" | undefined;
 

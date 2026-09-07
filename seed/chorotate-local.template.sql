@@ -1,7 +1,6 @@
--- TEST-ONLY LOCAL STRUCTURAL SEED. Deliberately unusable identities and
--- non-sendable contacts must remain in this tracked file. Never add real values
--- or wildcard/domain-wide access here. After seeding, use the private
--- operator:contacts:prepare workflow for exact D1-only configuration.
+-- LOCAL DEVELOPMENT SEED ONLY. The local auth identity below is deliberately
+-- non-production and is usable only by the build/runtime/loopback gates in the
+-- application. Never add real values or wildcard/domain-wide access here.
 PRAGMA foreign_keys = ON;
 
 INSERT OR IGNORE INTO households
@@ -14,10 +13,12 @@ INSERT OR IGNORE INTO members
  ('member-c','chorotate','Member C',1,'2026-08-31T00:00:00Z',NULL,'not_recorded','not_suppressed'),
  ('member-d','chorotate','Member D',1,'2026-08-31T00:00:00Z',NULL,'not_recorded','not_suppressed');
 INSERT OR IGNORE INTO allowlisted_identities (id,household_id,member_id,email_normalized,auth_user_id,active,created_at) VALUES
- ('identity-member-a','chorotate','member-a','member-a@replace-me.example.invalid',NULL,1,'2026-08-31T00:00:00Z'),
+ ('identity-member-a','chorotate','member-a','local@example.invalid','local-dev-user',1,'2026-08-31T00:00:00Z'),
  ('identity-member-b','chorotate','member-b','member-b@replace-me.example.invalid',NULL,1,'2026-08-31T00:00:00Z'),
  ('identity-member-c','chorotate','member-c','member-c@replace-me.example.invalid',NULL,1,'2026-08-31T00:00:00Z'),
  ('identity-member-d','chorotate','member-d','member-d@replace-me.example.invalid',NULL,1,'2026-08-31T00:00:00Z');
+INSERT OR IGNORE INTO "user" (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('local-dev-user','Local development member','local@example.invalid',1,NULL,'2026-08-31T00:00:00Z','2026-08-31T00:00:00Z');
 INSERT OR IGNORE INTO chores
  (id,household_id,name,active,created_at,instructions,ownership_start_weekday) VALUES
  ('trash','chorotate','Trash',1,'2026-08-31T00:00:00Z','Take the trash out and replace bags.',5),

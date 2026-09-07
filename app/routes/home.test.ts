@@ -30,6 +30,7 @@ const now = new Date("2026-08-31T12:00:00Z");
 const config = {
   canonicalOrigin: "https://app.example.test",
   applicationEnvironment: "test",
+  localAuthEnabled: false,
   household: {
     timeZone: "UTC",
     weekStart: "monday",
@@ -555,7 +556,35 @@ describe("authenticated home route integration", () => {
         },
       },
     );
-    expect(loadDenied).toEqual({ state: "unauthorized", view: "now" });
+    expect(loadDenied).toEqual({
+      state: "unauthorized",
+      view: "now",
+      localAuthAvailable: false,
+    });
+
+    const localConfig = {
+      ...config,
+      applicationEnvironment: "local" as const,
+      canonicalOrigin: "http://localhost:5173",
+      localAuthEnabled: true,
+      reminders: { ...config.reminders, smsEnabled: false },
+    };
+    const localLoadDenied = await loadHomeData(
+      new Request(localConfig.canonicalOrigin),
+      fixture.database,
+      localConfig,
+      {
+        ...loaderServices,
+        async authorize() {
+          throw new AuthorizationError(403);
+        },
+      },
+    );
+    expect(localLoadDenied).toEqual({
+      state: "unauthorized",
+      view: "now",
+      localAuthAvailable: true,
+    });
   });
 
   it("strictly rejects unknown, duplicate, and malformed form values", async () => {

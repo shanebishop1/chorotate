@@ -200,6 +200,7 @@ const data: ChoreRelayData = {
 function render(
   view: ChoreRelayView,
   state: "ready" | "unauthorized" | "unavailable" = "ready",
+  localAuthAvailable = false,
 ) {
   const Stub = createRoutesStub([
     {
@@ -209,9 +210,14 @@ function render(
           ? createElement(ChoreRelayShell, {
               activeView: view,
               state: "ready",
+              localAuthAvailable,
               data,
             })
-          : createElement(ChoreRelayShell, { activeView: view, state }),
+          : createElement(ChoreRelayShell, {
+              activeView: view,
+              state,
+              localAuthAvailable,
+            }),
     },
   ]);
   return renderToStaticMarkup(
@@ -325,6 +331,13 @@ describe("Chore Relay integrated rendering", () => {
     const unavailable = render("now", "unavailable");
     expect(unavailable).toContain("No schedule found");
     expect(unavailable).not.toContain("Take the trash");
+  });
+
+  it("uses the server-approved local auth presentation flag", () => {
+    const local = render("now", "unauthorized", true);
+    expect(local).toContain("Sign in locally");
+    expect(local).not.toContain("Sign in with Google");
+    expect(local).not.toContain('class="google-mark"');
   });
 
   it("places account actions behind a compact profile control", () => {

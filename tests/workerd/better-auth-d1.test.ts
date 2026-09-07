@@ -31,6 +31,7 @@ function environment(): AppEnvironment {
     HOUSEHOLD_WEEK_START: "monday",
     OWNER_EMAIL: email,
     ALLOWED_EMAILS: email,
+    LOCAL_AUTH_ENABLED: "false",
     REMINDER_SMS_ENABLED: "true",
     REMINDER_BATCH_SIZE: "25",
     REMINDER_LEASE_MILLISECONDS: "300000",

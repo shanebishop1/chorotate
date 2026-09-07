@@ -205,6 +205,36 @@ test("accepts clean command JSON and rejects file-import result shapes", () => {
   );
 });
 
+test("treats SMS enablement as an explicit fail-closed verification setting", () => {
+  const base = {
+    PRODUCTION_HOUSEHOLD_TIME_ZONE: "America/New_York",
+    PRODUCTION_HOUSEHOLD_WEEK_START: "monday",
+    PRODUCTION_HOUSEHOLD_MEMBER_COUNT: "3",
+    PRODUCTION_REMINDER_EVENING_LOCAL_TIME: "20:00",
+    PRODUCTION_REMINDER_MORNING_LOCAL_TIME: "08:00",
+  };
+  assert.equal(
+    productionD1SettingsFromEnvironment({
+      ...base,
+      PRODUCTION_REMINDER_SMS_ENABLED: "false",
+    }).smsEnabled,
+    false,
+  );
+  assert.equal(
+    productionD1SettingsFromEnvironment({
+      ...base,
+      PRODUCTION_REMINDER_SMS_ENABLED: "true",
+    }).smsEnabled,
+    true,
+  );
+  assert.throws(() =>
+    productionD1SettingsFromEnvironment({
+      ...base,
+      PRODUCTION_REMINDER_SMS_ENABLED: "yes",
+    }),
+  );
+});
+
 test("strictly accepts only private mode-restricted SQL files", async () => {
   const directory = mkdtempSync(join(tmpdir(), "chorotate-d1-operator-test-"));
   mkdirSync(resolve(".chorotate"), { recursive: true, mode: 0o700 });
@@ -276,9 +306,18 @@ test("redacts private boundaries and disables Wrangler disk logs", () => {
   const environment = productionWranglerEnvironment({
     WRANGLER_WRITE_LOGS: "true",
     PRODUCTION_D1_DATABASE_ID: databaseId,
+    PRODUCTION_OWNER_EMAIL: "owner@example.com",
+    PRODUCTION_REMINDER_SMS_ENABLED: "false",
+    PRODUCTION_DEPLOY_CONFIRM: "chorotate-production",
+    CHOROTATE_CF_API_TOKEN: "project-token",
   });
   assert.equal(environment.WRANGLER_WRITE_LOGS, "false");
   assert.equal(environment.PRODUCTION_D1_DATABASE_ID, undefined);
+  assert.equal(environment.PRODUCTION_OWNER_EMAIL, undefined);
+  assert.equal(environment.PRODUCTION_REMINDER_SMS_ENABLED, undefined);
+  assert.equal(environment.PRODUCTION_DEPLOY_CONFIRM, undefined);
+  assert.equal(environment.CLOUDFLARE_API_TOKEN, "project-token");
+  assert.equal(environment.CHOROTATE_CF_API_TOKEN, undefined);
 });
 
 test("maps the project Cloudflare token name for Wrangler", () => {
@@ -307,4 +346,53 @@ test("credential-free dry-runs and refusals make no remote request", () => {
   assert.match(refused.stderr, /^Usage:/);
   assert.ok(!refused.stdout.includes(databaseId));
   assert.ok(!refused.stderr.includes(databaseId));
+});
+
+test("dry-run with private input validates both argument orders without credentials", () => {
+  const directory = mkdtempSync(join(tmpdir(), "chorotate-verify-dry-run-"));
+  const inputPath = join(directory, "contacts.json");
+  writeFileSync(
+    inputPath,
+    `${JSON.stringify({
+      householdId: "chorotate",
+      householdName: "Dry Run Household",
+      recordedAt: "2026-09-01T00:00:00.000Z",
+      members: [
+        {
+          id: "member-a",
+          displayName: "Member A",
+          email: "member-a@example.com",
+          phoneE164: null,
+          consent: "not_recorded",
+          suppression: "not_suppressed",
+        },
+      ],
+    })}\n`,
+    { mode: 0o600 },
+  );
+  const environment = {
+    PRODUCTION_HOUSEHOLD_TIME_ZONE: "UTC",
+    PRODUCTION_HOUSEHOLD_WEEK_START: "monday",
+    PRODUCTION_HOUSEHOLD_MEMBER_COUNT: "1",
+    PRODUCTION_REMINDER_EVENING_LOCAL_TIME: "20:00",
+    PRODUCTION_REMINDER_MORNING_LOCAL_TIME: "08:00",
+    PRODUCTION_REMINDER_SMS_ENABLED: "false",
+  };
+  try {
+    for (const args of [
+      ["--dry-run", "--input", inputPath],
+      ["--input", inputPath, "--dry-run"],
+    ]) {
+      const result = spawnSync(
+        process.execPath,
+        [resolve("scripts/operator/verify-production-d1.mjs"), ...args],
+        { encoding: "utf8", env: environment },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /no remote request was made/);
+      assert.doesNotMatch(result.stdout, /D1 database|Cloudflare credentials/i);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

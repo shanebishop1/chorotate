@@ -4,12 +4,13 @@
   <a href="https://github.com/shanebishop1/chorotate/actions/workflows/ci.yml"><img alt="CI and tests" src="https://github.com/shanebishop1/chorotate/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" /></a>
 </p>
 
-ChoRotate is a private household chore scheduler. It keeps recurring responsibilities clear, shows who is responsible now and next, and gives the household a shared history of every change.
+ChoRotate lets you and your roommates track chores on a shared calendar and get SMS reminders when it's your turn. The web app, Google authentication, and scheduled text-message jobs are designed to deploy easily to Cloudflare, and the modular open-source code is easy for you or your coding agents to customize for your household.
 
 ## What it does
 
-- Builds a recurring schedule for each chore, including chores that turn over on different days.
+- Builds a recurring schedule for each chore, including chores that turn over on different weekdays.
 - Shows current and upcoming assignments for the household and each member.
+- Provides a household calendar and history of changes.
 - Lets authorized members reassign a turn or swap two assignments.
 - Prevents changes to completed periods and detects conflicting edits.
 - Records an audit history of automatic and manual assignment changes.
@@ -53,9 +54,15 @@ npm run seed:local
 npm run dev
 ```
 
-Open <http://localhost:5173>. The included seed contains placeholder household data and cannot access production resources or send messages.
+Open <http://localhost:5173> and click **Sign in locally**. No Google credentials or Cloudflare account are needed. You can use the calendar and change assignments with the included demo roommates and chores; SMS is disabled.
 
-The default environment values intentionally cannot complete Google sign-in. To test authentication, use a separate Google OAuth client and add the matching test email to your local household allowlist.
+Local sign-in works only in the development build on loopback, with `LOCAL_AUTH_ENABLED=true`. Production builds cannot enable it, even if the flag is set. Do not expose the development server through a tunnel or reverse proxy.
+
+### Your roommates and chores
+
+For your own data, use the [custom local household setup](docs/operations/operator-runbook.md#custom-local-household) **instead of** `npm run seed:local`. Copy `seed/operator-bootstrap.example.json` into the ignored `.chorotate/` directory, edit the roommate names and chores, and run `npm run operator:bootstrap:local` with the options in that guide. This also works without Google sign-in and signs you in as the first roommate in your configuration.
+
+The same JSON format configures a fresh production household. It supports chore names and instructions, the weekday each turn starts, and the rotation order. Bootstrap is first-run-only, not a way to overwrite an existing schedule.
 
 Run the standard project checks with:
 
@@ -72,4 +79,8 @@ npm run test:browser
 
 ## Operations
 
-Production setup, deployment, contact handling, SMS delivery constraints, and rollback procedures are documented in the [operator runbook](docs/operations/operator-runbook.md). Security boundaries are documented separately in the [security contract](docs/operations/security.md).
+The [operator runbook](docs/operations/operator-runbook.md) walks through Google Cloud Console, Cloudflare setup, where each setting and secret goes, household configuration, deployment, optional SMS, and rollback. The [security contract](docs/operations/security.md) describes authentication and local-development safeguards.
+
+## License
+
+[MIT](LICENSE). Fork it, modify it, and share it. Keep the license notice with your copy.

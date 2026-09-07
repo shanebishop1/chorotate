@@ -22,6 +22,7 @@ import {
 } from "../features/chore-relay/model";
 import { cloudflareContext } from "../runtime/context";
 import type { RuntimeConfig } from "../runtime/environment";
+import { isLocalDevelopmentRequest } from "../auth/local-development";
 import type { Route } from "./+types/home";
 import { runHomeAction, type HomeActionData } from "./home-action";
 import { useLocation, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -37,11 +38,20 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export type HomeLoaderData =
-  | { state: "unauthorized"; view: ReturnType<typeof normalizeView> }
-  | { state: "unavailable"; view: ReturnType<typeof normalizeView> }
+  | {
+      state: "unauthorized";
+      view: ReturnType<typeof normalizeView>;
+      localAuthAvailable: boolean;
+    }
+  | {
+      state: "unavailable";
+      view: ReturnType<typeof normalizeView>;
+      localAuthAvailable: boolean;
+    }
   | ({
       state: "ready";
       view: ReturnType<typeof normalizeView>;
+      localAuthAvailable: boolean;
     } & ChoreRelayData);
 
 interface HomeServices {
@@ -84,6 +94,7 @@ export async function loadHomeData(
   const search = new URL(request.url).searchParams;
   const view = normalizeView(search.get("view"));
   const householdRange = normalizeHouseholdRange(search.get("range"));
+  const localAuthAvailable = isLocalDevelopmentRequest(request, config);
   try {
     const member = await dependencies.authorize(request, database, config);
     const now = dependencies.now();
@@ -127,6 +138,7 @@ export async function loadHomeData(
     return {
       state: "ready",
       view,
+      localAuthAvailable,
       signedInMember: member,
       householdRange,
       localToday,
@@ -143,9 +155,9 @@ export async function loadHomeData(
       error instanceof AuthorizationError &&
       (error.status === 401 || error.status === 403)
     ) {
-      return { state: "unauthorized", view };
+      return { state: "unauthorized", view, localAuthAvailable };
     }
-    return { state: "unavailable", view };
+    return { state: "unavailable", view, localAuthAvailable };
   }
 }
 
@@ -249,9 +261,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     new URLSearchParams(useLocation().search).get("view"),
   );
   if (loaderData.state !== "ready") {
-    return <ChoreRelayShell activeView={activeView} state={loaderData.state} />;
+    return (
+      <ChoreRelayShell
+        activeView={activeView}
+        state={loaderData.state}
+        localAuthAvailable={loaderData.localAuthAvailable}
+      />
+    );
   }
   return (
-    <ChoreRelayShell activeView={activeView} state="ready" data={loaderData} />
+    <ChoreRelayShell
+      activeView={activeView}
+      state="ready"
+      localAuthAvailable={loaderData.localAuthAvailable}
+      data={loaderData}
+    />
   );
 }

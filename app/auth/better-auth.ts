@@ -15,6 +15,10 @@ import {
   type D1AuthBinding,
 } from "./d1-allowlist";
 import { MutationOriginError, requireExactMutationOrigin } from "./origin";
+import {
+  handleLocalDevelopmentAuthRequest,
+  readLocalDevelopmentSession,
+} from "./local-development";
 
 export interface BetterAuthService {
   handler(request: Request): Promise<Response>;
@@ -145,6 +149,12 @@ export function createBetterAuth(
     ready: auth.$context.then(() => undefined),
     handler: auth.handler,
     async readSession(request) {
+      const localSession = await readLocalDevelopmentSession(
+        request,
+        database,
+        config,
+      );
+      if (localSession !== null) return localSession;
       const result = await auth.api.getSession({
         headers: request.headers,
         query: {
@@ -199,6 +209,13 @@ export async function handleAuthRequest(
 ): Promise<Response> {
   try {
     requireExactMutationOrigin(request, config.canonicalOrigin);
+    const pathname = new URL(request.url).pathname;
+    if (
+      pathname === "/api/auth/local" ||
+      pathname === "/api/auth/local/sign-out"
+    ) {
+      return await handleLocalDevelopmentAuthRequest(request, database, config);
+    }
     const lookup = dependencies.lookup ?? createD1AllowlistLookup(database);
     const auth = (dependencies.factory ?? defaultFactory)(
       database,

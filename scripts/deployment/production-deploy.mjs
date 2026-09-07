@@ -193,6 +193,7 @@ try {
     rawConfig.env.production ??= {};
     rawConfig.env.production.vars = {
       APP_ENV: "production",
+      LOCAL_AUTH_ENABLED: "false",
       CANONICAL_ORIGIN: values.PRODUCTION_CANONICAL_ORIGIN,
       HOUSEHOLD_TIME_ZONE: values.PRODUCTION_HOUSEHOLD_TIME_ZONE,
       HOUSEHOLD_WEEK_START: values.PRODUCTION_HOUSEHOLD_WEEK_START,

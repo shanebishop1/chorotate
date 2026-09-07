@@ -2,6 +2,11 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 import {
+  readOperatorInput,
+  summarizeContactReadiness,
+} from "./operator-contact-config.mjs";
+
+import {
   buildProductionD1VerificationQuery,
   expectedProductionD1Result,
   parseProductionD1VerificationOutput,
@@ -15,44 +20,79 @@ import {
   withTemporaryWranglerConfig,
 } from "../deployment/production-d1-wrangler.mjs";
 
-const dryRun = process.argv.includes("--dry-run");
-const unexpectedArgs = process.argv
-  .slice(2)
-  .filter((argument) => argument !== "--dry-run");
-if (unexpectedArgs.length > 0) {
+const args = process.argv.slice(2);
+const dryRun = args.includes("--dry-run");
+const inputIndex = args.indexOf("--input");
+const unexpectedArgs = args.filter(
+  (argument, index) =>
+    argument !== "--dry-run" &&
+    argument !== "--input" &&
+    !(inputIndex !== -1 && index === inputIndex + 1),
+);
+if (
+  unexpectedArgs.length > 0 ||
+  (inputIndex !== -1 && !args[inputIndex + 1]) ||
+  args.filter((argument) => argument === "--input").length > 1
+) {
   console.error(
-    "Usage: node scripts/operator/verify-production-d1.mjs [--dry-run]",
+    "Usage: node scripts/operator/verify-production-d1.mjs [--dry-run] [--input <private-json-path>]",
   );
   process.exit(1);
 }
 
-if (dryRun) {
+if (dryRun && inputIndex === -1) {
   console.log(
-    "Remote D1 verification dry-run passed: command shape is fixed; checks cover migrations 0001-0008, exact household/member/identity/chore/rotation structure, contact readiness, and outbox duplicates; no remote request was made and no values were printed.",
+    "Remote D1 verification dry-run passed: command shape is fixed; checks cover migrations 0001-0008, exact household/member/identity/chore/rotation structure, contact-state integrity, SMS sendability only when enabled, and outbox duplicates; no remote request was made and no values were printed.",
   );
   process.exit(0);
 }
 
-/** @type {string} */
-let verificationQuery;
-let expectedResult;
-try {
-  const settings = productionD1SettingsFromEnvironment(process.env);
-  verificationQuery = buildProductionD1VerificationQuery(settings);
-  expectedResult = expectedProductionD1Result(settings.memberCount);
-} catch (error) {
-  console.error(
-    error instanceof Error
-      ? error.message
-      : "Invalid production D1 verification settings",
+async function main() {
+  const input =
+    inputIndex === -1
+      ? undefined
+      : await readOperatorInput(args[inputIndex + 1]);
+  let settings;
+  try {
+    settings = productionD1SettingsFromEnvironment(
+      process.env,
+      input === undefined
+        ? undefined
+        : { memberCount: input.members.length, chores: input.chores },
+    );
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : "Invalid production D1 verification settings",
+      { cause: error },
+    );
+  }
+  const verificationQuery = buildProductionD1VerificationQuery(settings);
+  const contactReadiness =
+    input === undefined ? undefined : summarizeContactReadiness(input);
+  const contactCounts =
+    contactReadiness === undefined
+      ? undefined
+      : { ...contactReadiness, malformed: 0 };
+  const expectedResult = expectedProductionD1Result(
+    settings.memberCount,
+    settings.chores,
+    {
+      smsEnabled: settings.smsEnabled,
+      contactCounts,
+    },
   );
-  process.exit(1);
-}
 
-let result;
-try {
+  if (dryRun) {
+    console.log(
+      "Remote D1 verification dry-run passed: private input, settings, query, and expected result were validated; no remote request was made and no values were printed.",
+    );
+    return;
+  }
+
   const databaseId = productionD1DatabaseIdFromEnvironment(process.env);
-  result = await withTemporaryWranglerConfig(
+  const result = await withTemporaryWranglerConfig(
     buildProductionD1OperatorConfig(databaseId),
     ({ configPath }) =>
       spawnSync(
@@ -71,39 +111,38 @@ try {
         },
       ),
   );
-} catch (error) {
+  if (result.status !== 0) {
+    throw new Error(
+      "Remote D1 verification unavailable or failed; confirm Cloudflare credentials, account access, and the chorotate-production database. Provider output was withheld.",
+    );
+  }
+
+  const row = parseProductionD1VerificationOutput(result.stdout);
+  if (row === undefined) {
+    throw new Error(
+      "Remote D1 verification returned an unreadable redacted result.",
+    );
+  }
+
+  const failures = Object.entries(expectedResult)
+    .filter(([name, value]) => value !== undefined && row[name] !== value)
+    .map(([name]) => name);
+  if (failures.length > 0) {
+    throw new Error(
+      `Remote D1 verification failed safe checks: ${failures.sort().join(", ")}. Values were not printed.`,
+    );
+  }
+
+  console.log(
+    "Remote D1 verification passed: migrations 0001-0008, exact household/member/identity/contact/configured-chore/rotation structure, and outbox uniqueness; Cloudflare D1 was queried, no values were printed, and no Textbelt request was made.",
+  );
+}
+
+main().catch((error) => {
   console.error(
     error instanceof Error
       ? error.message
-      : "Invalid production D1 configuration",
+      : "Production D1 verification failed",
   );
-  process.exit(1);
-}
-if (result.status !== 0) {
-  console.error(
-    "Remote D1 verification unavailable or failed; confirm Cloudflare credentials, account access, and the chorotate-production database. Provider output was withheld.",
-  );
-  process.exit(result.status ?? 1);
-}
-
-const row = parseProductionD1VerificationOutput(result.stdout);
-if (row === undefined) {
-  console.error(
-    "Remote D1 verification returned an unreadable redacted result.",
-  );
-  process.exit(1);
-}
-
-const failures = Object.entries(expectedResult)
-  .filter(([name, value]) => row[name] !== value)
-  .map(([name]) => name);
-if (failures.length > 0) {
-  console.error(
-    `Remote D1 verification failed safe checks: ${failures.sort().join(", ")}. Values were not printed.`,
-  );
-  process.exit(1);
-}
-
-console.log(
-  "Remote D1 verification passed: migrations 0001-0008, exact household/member/identity/contact/chore/rotation structure, and outbox uniqueness; Cloudflare D1 was queried, no values were printed, and no Textbelt request was made.",
-);
+  process.exitCode = 1;
+});

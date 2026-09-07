@@ -68,7 +68,9 @@ export function productionWranglerEnvironment(environment) {
       environment.CLOUDFLARE_API_TOKEN ?? environment.CHOROTATE_CF_API_TOKEN,
     WRANGLER_WRITE_LOGS: "false",
   };
-  delete safeEnvironment.PRODUCTION_D1_DATABASE_ID;
+  for (const name of Object.keys(safeEnvironment)) {
+    if (name.startsWith("PRODUCTION_")) delete safeEnvironment[name];
+  }
   delete safeEnvironment.CHOROTATE_CF_API_TOKEN;
   return safeEnvironment;
 }

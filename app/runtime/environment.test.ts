@@ -182,4 +182,42 @@ describe("parseRuntimeConfig", () => {
       }),
     );
   });
+
+  it("rejects the local authentication opt-in in production", () => {
+    expect(() =>
+      parseRuntimeConfig(
+        validTestEnvironment({
+          APP_ENV: "production",
+          CANONICAL_ORIGIN: "https://chores.example.com",
+          OWNER_EMAIL: "owner@example.com",
+          ALLOWED_EMAILS: "owner@example.com",
+          BETTER_AUTH_SECRET: "production-secret-that-is-long-enough",
+          GOOGLE_CLIENT_ID: "production-google-client-id",
+          GOOGLE_CLIENT_SECRET: "production-google-client-secret",
+          TEXTBELT_API_KEY: "production-textbelt-api-key",
+          LOCAL_AUTH_ENABLED: "true",
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidBindings: expect.arrayContaining(["LOCAL_AUTH_ENABLED"]),
+      }),
+    );
+  });
+
+  it("requires local authentication to keep SMS disabled", () => {
+    expect(() =>
+      parseRuntimeConfig(
+        validTestEnvironment({
+          APP_ENV: "local",
+          LOCAL_AUTH_ENABLED: "true",
+          REMINDER_SMS_ENABLED: "true",
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidBindings: expect.arrayContaining(["REMINDER_SMS_ENABLED"]),
+      }),
+    );
+  });
 });

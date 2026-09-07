@@ -1,0 +1,57 @@
+{
+  "householdId": "chorotate",
+  "householdName": "Local Example Household",
+  "recordedAt": "2026-09-01T00:00:00.000Z",
+  "members": [
+    {
+      "id": "member-a",
+      "displayName": "Member A",
+      "email": "member-a@example.com",
+      "phoneE164": null,
+      "consent": "not_recorded",
+      "suppression": "not_suppressed"
+    },
+    {
+      "id": "member-b",
+      "displayName": "Member B",
+      "email": "member-b@example.com",
+      "phoneE164": null,
+      "consent": "not_recorded",
+      "suppression": "not_suppressed"
+    },
+    {
+      "id": "member-c",
+      "displayName": "Member C",
+      "email": "member-c@example.com",
+      "phoneE164": null,
+      "consent": "not_recorded",
+      "suppression": "not_suppressed"
+    }
+  ],
+  "chores": [
+    {
+      "id": "recycling",
+      "name": "Recycling",
+      "instructions": "Rinse containers and take the recycling out.",
+      "ownershipStartWeekday": "wednesday",
+      "rotation": {
+        "id": "rotation-recycling-2026-09-02",
+        "effectiveFrom": "2026-09-02",
+        "offset": 0,
+        "memberIds": ["member-b", "member-c", "member-a"]
+      }
+    },
+    {
+      "id": "kitchen-reset",
+      "name": "Kitchen Reset",
+      "instructions": "Wipe the counters and reset the kitchen.",
+      "ownershipStartWeekday": "saturday",
+      "rotation": {
+        "id": "rotation-kitchen-reset-2026-09-05",
+        "effectiveFrom": "2026-09-05",
+        "offset": 1,
+        "memberIds": ["member-a", "member-b", "member-c"]
+      }
+    }
+  ]
+}

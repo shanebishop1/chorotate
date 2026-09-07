@@ -42,6 +42,36 @@ const validInput = {
   })),
 };
 
+const customInput = {
+  ...validInput,
+  chores: [
+    {
+      id: "recycling",
+      name: "Recycling",
+      instructions: "Rinse containers; don't leave bags outside.",
+      ownershipStartWeekday: "wednesday",
+      rotation: {
+        id: "rotation-recycling-2026-09-02",
+        effectiveFrom: "2026-09-02",
+        offset: 1,
+        memberIds: ["member-b", "member-c", "member-a"],
+      },
+    },
+    {
+      id: "kitchen-reset",
+      name: "Kitchen Reset",
+      instructions: "Wipe the counters and reset the kitchen.",
+      ownershipStartWeekday: "saturday",
+      rotation: {
+        id: "rotation-kitchen-reset-2026-09-05",
+        effectiveFrom: "2026-09-05",
+        offset: 0,
+        memberIds: ["member-a", "member-b", "member-c"],
+      },
+    },
+  ],
+};
+
 /** @param {DatabaseSync} database @param {string} sql */
 function execAtomic(database, sql) {
   database.exec("BEGIN");
@@ -165,6 +195,7 @@ test("bootstraps a fresh migrated D1 database exactly once", () => {
 
   assert.match(sql, /CREATE TABLE operator_bootstrap_assert/);
   assert.doesNotMatch(sql, /CREATE TEMP(?:ORARY)? TABLE/i);
+  assert.doesNotMatch(sql, /^\s*(?:BEGIN|COMMIT)\b/im);
   execAtomic(database, sql);
   const household = database
     .prepare(
@@ -256,6 +287,90 @@ test("bootstraps a fresh migrated D1 database exactly once", () => {
       ?.name,
     validInput.householdName,
   );
+});
+
+test("bootstraps explicitly configured chores and preserves rotation order safely", () => {
+  const input = validateContactInput(customInput);
+  const sql = buildBootstrapSql(input, {
+    timeZone: "America/New_York",
+    weekStart: "monday",
+    eveningTime: "20:00",
+    morningTime: "08:00",
+  });
+  assert.doesNotMatch(
+    sql,
+    /Trash|Dishwasher|rotation-trash|rotation-dishwasher/,
+  );
+  assert.match(sql, /Rinse containers; don''t leave bags outside\./);
+
+  const database = new DatabaseSync(":memory:");
+  for (const migration of readdirSync(resolve("migrations")).sort()) {
+    database.exec(readFileSync(resolve("migrations", migration), "utf8"));
+  }
+  execAtomic(database, sql);
+
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT id,name,instructions,ownership_start_weekday
+         FROM chores ORDER BY id`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      {
+        id: "kitchen-reset",
+        name: "Kitchen Reset",
+        instructions: "Wipe the counters and reset the kitchen.",
+        ownership_start_weekday: 6,
+      },
+      {
+        id: "recycling",
+        name: "Recycling",
+        instructions: "Rinse containers; don't leave bags outside.",
+        ownership_start_weekday: 3,
+      },
+    ],
+  );
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT id,chore_id,effective_from,rotation_offset
+         FROM rotation_configs ORDER BY id`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      {
+        id: "rotation-kitchen-reset-2026-09-05",
+        chore_id: "kitchen-reset",
+        effective_from: "2026-09-05",
+        rotation_offset: 0,
+      },
+      {
+        id: "rotation-recycling-2026-09-02",
+        chore_id: "recycling",
+        effective_from: "2026-09-02",
+        rotation_offset: 1,
+      },
+    ],
+  );
+  assert.deepEqual(
+    database
+      .prepare(
+        `SELECT member_id,position FROM rotation_config_members
+         WHERE rotation_config_id = 'rotation-recycling-2026-09-02'
+         ORDER BY position`,
+      )
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { member_id: "member-b", position: 0 },
+      { member_id: "member-c", position: 1 },
+      { member_id: "member-a", position: 2 },
+    ],
+  );
+  assert.equal(assertionTableCount(database), 0);
 });
 
 test("exact-row assertion failures roll back updates and assertion tables", () => {
@@ -480,6 +595,142 @@ test("the remote verification query proves the exact generated bootstrap", () =>
   const incompleteRotation = database.prepare(query).get();
   assert.ok(incompleteRotation);
   assert.equal(incompleteRotation.expected_rotation_members, 1);
+});
+
+test("the remote verification query follows configured chore identities and counts", () => {
+  const input = validateContactInput(customInput);
+  const database = new DatabaseSync(":memory:");
+  database.exec(
+    `CREATE TABLE d1_migrations
+      (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);`,
+  );
+  for (const [index, migration] of readdirSync(resolve("migrations"))
+    .sort()
+    .entries()) {
+    database.exec(readFileSync(resolve("migrations", migration), "utf8"));
+    database
+      .prepare("INSERT INTO d1_migrations (id,name,applied_at) VALUES (?,?,?)")
+      .run(index + 1, migration, input.recordedAt);
+  }
+  execAtomic(
+    database,
+    buildBootstrapSql(input, {
+      timeZone: "America/New_York",
+      weekStart: "monday",
+      eveningTime: "20:00",
+      morningTime: "08:00",
+    }),
+  );
+  const settings = {
+    timeZone: "America/New_York",
+    weekStart: "monday",
+    eveningTime: "20:00",
+    morningTime: "08:00",
+    memberCount: input.members.length,
+    chores: input.chores,
+  };
+  const query = buildProductionD1VerificationQuery(settings);
+  assert.doesNotMatch(
+    query,
+    /Trash|Dishwasher|rotation-trash|rotation-dishwasher/,
+  );
+  assert.deepEqual(
+    { ...database.prepare(query).get() },
+    expectedProductionD1Result(input.members.length, input.chores),
+  );
+  database.exec(
+    `UPDATE rotation_config_members
+     SET position = position + 3
+     WHERE rotation_config_id = 'rotation-recycling-2026-09-02';
+     UPDATE rotation_config_members
+     SET position = CASE position
+       WHEN 3 THEN 1 WHEN 4 THEN 0 ELSE position END
+     WHERE rotation_config_id = 'rotation-recycling-2026-09-02'`,
+  );
+  const reordered = database.prepare(query).get();
+  assert.ok(reordered);
+  assert.equal(reordered.expected_rotation_order, 1);
+});
+
+test("allows opt-outs and missing phones when SMS is disabled but validates states", () => {
+  const database = new DatabaseSync(":memory:");
+  const migrations = readdirSync(resolve("migrations")).sort();
+  database.exec(
+    `CREATE TABLE d1_migrations
+      (id INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);`,
+  );
+  for (const [index, migration] of migrations.entries()) {
+    database.exec(readFileSync(resolve("migrations", migration), "utf8"));
+    database
+      .prepare("INSERT INTO d1_migrations (id,name,applied_at) VALUES (?,?,?)")
+      .run(index + 1, migration, validInput.recordedAt);
+  }
+  execAtomic(
+    database,
+    buildBootstrapSql(validateContactInput(validInput), {
+      timeZone: "America/New_York",
+      weekStart: "monday",
+      eveningTime: "20:00",
+      morningTime: "08:00",
+    }),
+  );
+  database.exec(`
+    UPDATE members
+    SET sms_phone_e164 = NULL,
+        sms_consent_status = 'not_recorded',
+        sms_suppression_status = 'suppressed'
+    WHERE id = 'member-a';
+  `);
+  const disabledQuery = buildProductionD1VerificationQuery({
+    timeZone: "America/New_York",
+    weekStart: "monday",
+    eveningTime: "20:00",
+    morningTime: "08:00",
+    memberCount: validInput.members.length,
+    smsEnabled: false,
+  });
+  const disabledResult = database.prepare(disabledQuery).get();
+  assert.ok(disabledResult);
+  assert.deepEqual(
+    { ...disabledResult },
+    expectedProductionD1Result(validInput.members.length, undefined, {
+      smsEnabled: false,
+      contactCounts: {
+        missing: 1,
+        malformed: 0,
+        unconsented: 1,
+        suppressed: 1,
+      },
+    }),
+  );
+
+  const enabledExpected = expectedProductionD1Result(
+    validInput.members.length,
+    undefined,
+    { smsEnabled: true },
+  );
+  assert.equal(enabledExpected.missing_contacts, 0);
+  assert.notEqual(
+    disabledResult.missing_contacts,
+    enabledExpected.missing_contacts,
+  );
+  assert.notEqual(
+    disabledResult.unconsented_contacts,
+    enabledExpected.unconsented_contacts,
+  );
+  assert.notEqual(
+    disabledResult.suppressed_contacts,
+    enabledExpected.suppressed_contacts,
+  );
+
+  database.exec(`
+    PRAGMA ignore_check_constraints = ON;
+    UPDATE members SET sms_consent_status = 'invalid' WHERE id = 'member-b';
+    PRAGMA ignore_check_constraints = OFF;
+  `);
+  const invalidState = database.prepare(disabledQuery).get();
+  assert.ok(invalidState);
+  assert.equal(invalidState.invalid_contact_states, 1);
 });
 
 test("rejects malformed production bootstrap settings without private values", () => {
