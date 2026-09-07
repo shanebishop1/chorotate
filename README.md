@@ -46,23 +46,31 @@ npm ci
 cp .dev.vars.example .dev.vars
 ```
 
-Create the local database and start the app:
+Create your local household and start the app:
 
 ```sh
-npx wrangler d1 migrations apply chorotate-local --local
-npm run seed:local
+mkdir -p .chorotate
+cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
+chmod 600 .chorotate/operator-bootstrap.json
+# Edit .chorotate/operator-bootstrap.json with your roommates and chores.
+npm run operator:bootstrap:local -- \
+  --input .chorotate/operator-bootstrap.json \
+  --time-zone America/New_York \
+  --week-start monday \
+  --evening-time 20:00 \
+  --morning-time 08:00
 npm run dev
 ```
 
-Open <http://localhost:5173> and click **Sign in locally**. No Google credentials or Cloudflare account are needed. You can use the calendar and change assignments with the included demo roommates and chores; SMS is disabled.
+Open <http://localhost:5173> and click **Sign in locally**. No Google credentials or Cloudflare account are needed. The first roommate in your configuration is used for local sign-in; SMS is disabled.
 
 Local sign-in works only in the development build on loopback, with `LOCAL_AUTH_ENABLED=true`. Production builds cannot enable it, even if the flag is set. Do not expose the development server through a tunnel or reverse proxy.
 
-### Your roommates and chores
+### Household configuration
 
-For your own data, use the [custom local household setup](docs/operations/operator-runbook.md#custom-local-household) **instead of** `npm run seed:local`. Copy `seed/operator-bootstrap.example.json` into the ignored `.chorotate/` directory, edit the roommate names and chores, and run `npm run operator:bootstrap:local` with the options in that guide. This also works without Google sign-in and signs you in as the first roommate in your configuration.
+Edit `.chorotate/operator-bootstrap.json` to set roommate names, emails, chores, instructions, weekdays, and rotation order. The same JSON format configures a fresh production household. Bootstrap is first-run-only, not a way to overwrite an existing schedule. See the [custom household setup](docs/operations/operator-runbook.md#custom-local-household) for the field rules.
 
-The same JSON format configures a fresh production household. It supports chore names and instructions, the weekday each turn starts, and the rotation order. Bootstrap is first-run-only, not a way to overwrite an existing schedule.
+To run the app with neutral demo data instead, use `npm run seed:local` after applying migrations. This is optional and should not be used with the custom bootstrap in the same local database.
 
 Run the standard project checks with:
 
@@ -83,4 +91,4 @@ The [operator runbook](docs/operations/operator-runbook.md) walks through Google
 
 ## License
 
-[MIT](LICENSE). Fork it, modify it, and share it. Keep the license notice with your copy.
+[MIT](LICENSE)
