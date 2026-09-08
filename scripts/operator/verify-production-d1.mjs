@@ -19,6 +19,9 @@ import {
   productionWranglerEnvironment,
   withTemporaryWranglerConfig,
 } from "../deployment/production-d1-wrangler.mjs";
+import { loadProductionEnvironment } from "../deployment/load-production-environment.mjs";
+
+loadProductionEnvironment();
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");

@@ -11,6 +11,9 @@ import {
   redactPrivateValues,
   withTemporaryWranglerConfig,
 } from "../deployment/production-d1-wrangler.mjs";
+import { loadProductionEnvironment } from "../deployment/load-production-environment.mjs";
+
+loadProductionEnvironment();
 
 const repositoryRoot = resolve(
   fileURLToPath(new URL("../..", import.meta.url)),

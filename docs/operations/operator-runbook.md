@@ -217,28 +217,37 @@ and [D1 Wrangler commands](https://developers.cloudflare.com/d1/wrangler-command
 
 ## Production values and secrets
 
-The deployment wrapper reads `PRODUCTION_*` values from the shell process. Put
-these values in a local, ignored shell environment or secret manager; do **not**
-put them in `wrangler.jsonc`, `.dev.vars`, or the private household JSON.
+Production commands load `PRODUCTION_*` values from the ignored
+`.chorotate/production.env` file when it exists. It must be a mode-`0600`
+regular file; shell variables override it for one-off changes. Do **not** put
+these values in `wrangler.jsonc`, `.dev.vars`, or the private household JSON.
 
 Set the following before any deployment or remote D1 command. Replace every
 placeholder, and keep SMS disabled until consent and provider readiness are
 complete:
 
 ```sh
-export PRODUCTION_D1_DATABASE_ID='uuid-from-wrangler-d1-create'
-export PRODUCTION_CANONICAL_ORIGIN='https://chorotate-production.<account-subdomain>.workers.dev'
-export PRODUCTION_HOUSEHOLD_TIME_ZONE='America/New_York'
-export PRODUCTION_HOUSEHOLD_WEEK_START='monday'
-export PRODUCTION_OWNER_EMAIL='owner@example.com'
-export PRODUCTION_ALLOWED_EMAILS='owner@example.com,roommate@example.com'
-export PRODUCTION_REMINDER_SMS_ENABLED='false'
-export PRODUCTION_REMINDER_BATCH_SIZE='25'
-export PRODUCTION_REMINDER_LEASE_MILLISECONDS='300000'
-export PRODUCTION_REMINDER_MAX_ATTEMPTS='5'
-export PRODUCTION_REMINDER_PROVIDER_TIMEOUT_MILLISECONDS='10000'
-export PRODUCTION_REMINDER_RETRY_BASE_MILLISECONDS='60000'
-export PRODUCTION_REMINDER_RETRY_MAX_MILLISECONDS='900000'
+mkdir -p .chorotate
+touch .chorotate/production.env
+chmod 600 .chorotate/production.env
+```
+
+Put these `KEY=value` lines in that file:
+
+```text
+PRODUCTION_D1_DATABASE_ID=uuid-from-wrangler-d1-create
+PRODUCTION_CANONICAL_ORIGIN=https://chorotate-production.<account-subdomain>.workers.dev
+PRODUCTION_HOUSEHOLD_TIME_ZONE=America/New_York
+PRODUCTION_HOUSEHOLD_WEEK_START=monday
+PRODUCTION_OWNER_EMAIL=owner@example.com
+PRODUCTION_ALLOWED_EMAILS=owner@example.com,roommate@example.com
+PRODUCTION_REMINDER_SMS_ENABLED=false
+PRODUCTION_REMINDER_BATCH_SIZE=25
+PRODUCTION_REMINDER_LEASE_MILLISECONDS=300000
+PRODUCTION_REMINDER_MAX_ATTEMPTS=5
+PRODUCTION_REMINDER_PROVIDER_TIMEOUT_MILLISECONDS=10000
+PRODUCTION_REMINDER_RETRY_BASE_MILLISECONDS=60000
+PRODUCTION_REMINDER_RETRY_MAX_MILLISECONDS=900000
 ```
 
 `PRODUCTION_OWNER_EMAIL` must be lowercase and must appear in

@@ -15,6 +15,9 @@ import {
   successfulProductionDeployChecks,
   withEmittedDeployConfigCleanup,
 } from "./production-deploy-output.mjs";
+import { loadProductionEnvironment } from "./load-production-environment.mjs";
+
+loadProductionEnvironment();
 
 const mode = process.argv[2];
 if (mode !== "dry-run" && mode !== "deploy") {
