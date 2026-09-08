@@ -587,8 +587,9 @@ test("on-duty cards center calendars and reserve stable reminder slots", async (
     expect(Math.abs(card.calendarCenterOffset)).toBeLessThan(1);
     expect(Math.abs(card.reminderRightOffset)).toBeLessThan(1);
   }
-  expect(geometry[0]!.reminderWidth).toBe(geometry[1]!.reminderWidth);
-  expect(geometry[0]!.rowHeight).toBe(geometry[1]!.rowHeight);
+  // Transformed browser rectangles can differ by floating-point rounding.
+  expect(geometry[0]!.reminderWidth).toBeCloseTo(geometry[1]!.reminderWidth, 3);
+  expect(geometry[0]!.rowHeight).toBeCloseTo(geometry[1]!.rowHeight, 3);
 });
 
 test("household calendar reloads each navigated month", async ({ page }) => {
