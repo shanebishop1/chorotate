@@ -1,4 +1,13 @@
 @media (max-width: 365px) {
+  .view-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .view-heading > .button {
+    width: 100%;
+  }
+
   .brand {
     font-size: 1.03rem;
   }
@@ -22,5 +31,17 @@
   .review-route .person {
     width: 38px;
     height: 38px;
+  }
+
+  .history-meta {
+    display: grid;
+  }
+
+  .history-meta time {
+    margin-left: 0;
+  }
+
+  .history-legs > div {
+    overflow-wrap: anywhere;
   }
 }

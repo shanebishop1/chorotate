@@ -14,6 +14,7 @@ import type { ChoreRelayView, HouseholdRange } from "./model";
 export interface ChoreRelayData {
   signedInMember: AuthorizedMember;
   householdRange: HouseholdRange;
+  householdMonth: string;
   localToday: string;
   current: Awaited<ReturnType<typeof getCurrentAndNext>>;
   mine: Awaited<ReturnType<typeof getPersonalAgenda>>;

@@ -18,12 +18,14 @@
 @media (hover: hover) {
   .primary-nav a:hover,
   .button.quiet:hover,
-  .icon-button:hover {
-    border-color: var(--relay);
+  .button.secondary:hover,
+  .icon-button:hover,
+  .profile-trigger:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
   }
 
   .button.primary:hover {
     background: var(--relay-deep);
   }
 }
-

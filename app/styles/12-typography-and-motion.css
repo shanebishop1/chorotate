@@ -1,36 +1,3 @@
-.app-shell strong,
-.app-shell h1,
-.app-shell h2,
-.app-shell h3 {
-  font-weight: 600;
-}
-
-.brand,
-.button,
-.primary-nav a,
-.filter-row .custom-dropdown-label,
-.member-picker legend,
-.member-picker label,
-.swap-picker .custom-dropdown-label,
-.period-range,
-.handoff-source,
-.timeline-node,
-.reminder-status li,
-.preview-badge,
-.now-badge,
-.event-badge,
-.status-mark {
-  font-weight: 600;
-}
-
-.eyebrow,
-.card-kicker,
-.strip-label,
-.section-label,
-.swap-leg > header > span {
-  font-weight: 650;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -40,4 +7,22 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .main-content > section {
+    animation: none;
+  }
+
+  .button,
+  .icon-button,
+  .profile-trigger,
+  .primary-nav a {
+    transform: none !important;
+  }
+}
+
+:where(.app-shell) strong,
+:where(.app-shell) h1,
+:where(.app-shell) h2,
+:where(.app-shell) h3 {
+  font-weight: 600;
 }

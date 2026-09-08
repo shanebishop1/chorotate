@@ -1,30 +1,36 @@
 .app-shell {
-  --canvas: #f4f0e7;
-  --canvas-fade: #eee7d9;
-  --surface: #fffcf6;
-  --surface-raised: #ffffff;
-  --surface-soft: #ebe5d9;
-  --ink: #27231d;
-  --muted: #655e53;
-  --faint: #6f685d;
-  --line: #ded6c8;
-  --line-strong: #c9bdab;
-  --relay: #a54620;
-  --relay-deep: #813415;
-  --relay-soft: #f4ddcf;
-  --now: #f5e8bd;
-  --now-line: #ddc46e;
-  --positive: #276b55;
-  --positive-soft: #dcebe2;
-  --danger: #a4372b;
-  --danger-soft: #f7dfda;
-  --focus: #b3451b;
-  --shadow-sm: 0 1px 2px rgb(44 36 25 / 6%), 0 5px 18px rgb(44 36 25 / 5%);
-  --shadow-lg: 0 22px 70px rgb(37 29 18 / 18%);
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 9% 4%, rgb(255 255 255 / 62%) 0 11rem, transparent 24rem),
-    var(--canvas);
+  --canvas: #f3f1eb;
+  --canvas-fade: #ebe8df;
+  --surface: #faf9f5;
+  --surface-raised: #fffefa;
+  --surface-soft: #eeece5;
+  --ink: #1f221f;
+  --muted: #666b64;
+  --faint: #7b8079;
+  --line: #d9d8d1;
+  --line-strong: #bdbfb7;
+  --relay: #d95f32;
+  --relay-deep: #a83d1b;
+  --relay-soft: #f6ded3;
+  --now: #f2ead2;
+  --now-line: #d7c589;
+  --positive: #27705a;
+  --positive-soft: #dcece5;
+  --danger: #a63e35;
+  --danger-soft: #f5dfdc;
+  --focus: #b9431e;
+  --shadow-sm: 0 1px 2px rgb(25 28 24 / 5%);
+  --shadow-lg: 0 18px 60px rgb(17 19 16 / 25%);
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  background: var(--canvas);
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
   color: var(--ink);
 }
 
@@ -50,8 +56,9 @@
   --danger: #ff9c8d;
   --danger-soft: #4a201c;
   --focus: #f2a06f;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 20px rgb(0 0 0 / 16%);
-  --shadow-lg: 0 25px 80px rgb(0 0 0 / 55%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 22%);
+  --shadow-lg: 0 20px 65px rgb(0 0 0 / 55%);
+  background: var(--canvas);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -77,9 +84,41 @@
     --danger: #ff9c8d;
     --danger-soft: #4a201c;
     --focus: #f2a06f;
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%), 0 8px 20px rgb(0 0 0 / 16%);
-    --shadow-lg: 0 25px 80px rgb(0 0 0 / 55%);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 22%);
+    --shadow-lg: 0 20px 65px rgb(0 0 0 / 55%);
+    background: var(--canvas);
   }
+}
+
+html[data-theme="dark"] .app-shell {
+  color-scheme: dark;
+  --canvas: #111310;
+  --canvas-fade: #181b17;
+  --surface: #181b17;
+  --surface-raised: #1d201c;
+  --surface-soft: #242821;
+  --ink: #f0f1ec;
+  --muted: #a7ada4;
+  --faint: #8e958c;
+  --line: #30352d;
+  --line-strong: #4d554a;
+  --relay: #f1845c;
+  --relay-deep: #ff9c75;
+  --relay-soft: #41271d;
+  --now: #342f1f;
+  --now-line: #6f6238;
+  --positive: #86d1b5;
+  --positive-soft: #183a2f;
+  --danger: #ff9b90;
+  --danger-soft: #44231f;
+  --focus: #ff9c75;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 22%);
+  --shadow-lg: 0 20px 65px rgb(0 0 0 / 55%);
+  background: var(--canvas);
+}
+
+html[data-theme="light"] .app-shell {
+  color-scheme: light;
 }
 
 :focus-visible {
@@ -121,73 +160,63 @@
   position: sticky;
   z-index: 30;
   top: 0;
+  padding-top: env(safe-area-inset-top);
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--canvas) 91%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  backdrop-filter: blur(14px);
 }
 
 .header-row,
 .primary-nav,
 .main-content,
 .site-footer {
-  width: min(1120px, 100%);
+  width: min(980px, 100%);
   margin-inline: auto;
 }
 
 .header-row {
   display: flex;
-  min-height: 70px;
+  min-height: 60px;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 10px 22px 7px;
+  padding: 7px 18px 5px;
 }
 
 .brand {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   color: var(--ink);
-  font-size: 1.18rem;
-  font-weight: 850;
-  letter-spacing: -0.035em;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
   text-decoration: none;
 }
 
 .brand-mark {
   position: relative;
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: 31px;
+  height: 31px;
   align-items: center;
-  padding: 7px;
-  border-radius: 11px;
+  padding: 4px;
+  border: 0;
+  border-radius: 9px;
   background: var(--relay);
-  box-shadow: inset 0 -3px 0 rgb(82 26 7 / 17%);
+  box-shadow: none;
 }
 
+.brand-mark::after,
 .brand-mark span {
+  display: none;
+}
+
+.brand-mark .icon {
   display: block;
-  width: 8px;
-  height: 8px;
-  border: 2px solid white;
-  border-radius: 50%;
+  width: 23px;
+  height: 23px;
+  color: #fff;
+  stroke-width: 1.9;
 }
-
-.brand-mark span + span {
-  margin-left: -1px;
-}
-
-.brand-mark::after {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 9px;
-  height: 2px;
-  border-radius: 2px;
-  background: white;
-  content: "";
-  transform: rotate(-35deg);
-}
-

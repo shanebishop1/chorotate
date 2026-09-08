@@ -17,3 +17,17 @@ export function normalizeView(value: string | null): ChoreRelayView {
 export function normalizeHouseholdRange(value: string | null): HouseholdRange {
   return value === "all" ? "all" : "upcoming";
 }
+
+export function normalizeHouseholdMonth(
+  value: string | null,
+  fallback: string,
+): string {
+  if (
+    !value ||
+    !/^\d{4}-(0[1-9]|1[0-2])$/.test(value) ||
+    value < "0001-01" ||
+    value > "9998-12"
+  )
+    return fallback;
+  return value;
+}

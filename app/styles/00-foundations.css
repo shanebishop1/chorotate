@@ -10,13 +10,29 @@
 }
 
 html {
+  width: 100%;
+  height: 100%;
   min-width: 320px;
-  background: #f4f0e7;
+  overflow: hidden;
+  background: #fffefa;
   -webkit-text-size-adjust: 100%;
+}
+
+html[data-theme="dark"] {
+  background: #1d201c;
 }
 
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 button,
@@ -57,4 +73,3 @@ h2,
 h3 {
   text-wrap: balance;
 }
-

@@ -591,9 +591,7 @@ test("on-duty cards center calendars and reserve stable reminder slots", async (
   expect(geometry[0]!.rowHeight).toBe(geometry[1]!.rowHeight);
 });
 
-test("household calendar moves between months without navigation", async ({
-  page,
-}) => {
+test("household calendar reloads each navigated month", async ({ page }) => {
   await page.goto("/?view=household");
   await expect(
     page.getByRole("heading", { name: "August 2026" }),
@@ -610,11 +608,43 @@ test("household calendar moves between months without navigation", async ({
   await expect(
     page.getByRole("heading", { name: "September 2026" }),
   ).toBeVisible();
-  await expect(page).toHaveURL("/?view=household");
+  await expect(page).toHaveURL("/?view=household&month=2026-09");
+  await expect(
+    page.getByRole("button", {
+      name: /Reassign Dishwasher, Mon, Aug 24 – Sun, Aug 30/,
+    }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(
+    page.getByRole("heading", { name: "October 2026" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("button", {
+        name: /Reassign Trash, Fri, Oct 2 – Thu, Oct 8/,
+      })
+      .first(),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Next month" }).click();
+  await expect(
+    page.getByRole("heading", { name: "November 2026" }),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    "No assignments this month",
+  );
+  await expect(
+    page.getByRole("button", { name: "Prepare schedule" }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Previous month" }).click();
   await expect(
-    page.getByRole("heading", { name: "August 2026" }),
+    page.getByRole("heading", { name: "October 2026" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Previous month" }).click();
+  await expect(
+    page.getByRole("heading", { name: "September 2026" }),
   ).toBeVisible();
 });
 

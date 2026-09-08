@@ -8,8 +8,10 @@ import {
   getHouseholdCalendar,
   getHouseholdList,
   getPersonalAgenda,
+  ReadModelError,
   type ReadModelContext,
 } from "../domain/read-models";
+import { MAX_CALENDAR_ASSIGNMENTS } from "../domain/read-models/shared";
 import { MATERIALIZATION_HORIZON_PERIODS } from "../domain/rotation/prepare";
 import type { D1DatabaseLike } from "../domain/storage/d1";
 import {
@@ -17,6 +19,7 @@ import {
   type ChoreRelayData,
 } from "../features/chore-relay/chore-relay-shell";
 import {
+  normalizeHouseholdMonth,
   normalizeHouseholdRange,
   normalizeView,
 } from "../features/chore-relay/model";
@@ -69,7 +72,8 @@ const services: HomeServices = {
 };
 
 const READ_PAGE_SIZE = 100;
-const HOUSEHOLD_ASSIGNMENT_CAP = 200;
+const HOUSEHOLD_ASSIGNMENT_CAP = MAX_CALENDAR_ASSIGNMENTS;
+const ASSIGNMENT_CANDIDATE_CAP = 200;
 
 function authorizedReads(
   database: D1DatabaseLike,
@@ -100,7 +104,12 @@ export async function loadHomeData(
     const now = dependencies.now();
     const context = authorizedReads(database, member);
     const localToday = localDateAt(now, config.household.timeZone);
+    const householdMonth = normalizeHouseholdMonth(
+      search.get("month"),
+      localToday.slice(0, 7),
+    );
     const upcomingWindow = householdUpcomingWindow(localToday);
+    const householdWindow = householdCalendarWindow(householdMonth);
     const candidateWindow = {
       fromDate: upcomingWindow.fromDate,
       toDate: addLocalDays(localToday, MATERIALIZATION_HORIZON_PERIODS * 7),
@@ -116,12 +125,15 @@ export async function loadHomeData(
     ] = await Promise.all([
       getCurrentAndNext(context, { request, now }),
       getPersonalAgenda(context, { request, now, limit: 100 }),
-      getBoundedHouseholdList(context, {
-        request,
-        now,
-        fromDate: "0001-01-01",
-        toDate: "9999-12-31",
-      }),
+      getBoundedHouseholdList(
+        context,
+        {
+          request,
+          now,
+          ...householdWindow,
+        },
+        { failOnOverflow: true },
+      ),
       getHouseholdCalendar(context, {
         request,
         now,
@@ -129,11 +141,15 @@ export async function loadHomeData(
       }),
       getGroupedHistory(context, { request, limit: 25 }),
       getActiveMembers(context, { request }),
-      getBoundedHouseholdList(context, {
-        request,
-        now,
-        ...candidateWindow,
-      }),
+      getBoundedHouseholdList(
+        context,
+        {
+          request,
+          now,
+          ...candidateWindow,
+        },
+        { cap: ASSIGNMENT_CANDIDATE_CAP },
+      ),
     ]);
     return {
       state: "ready",
@@ -141,6 +157,7 @@ export async function loadHomeData(
       localAuthAvailable,
       signedInMember: member,
       householdRange,
+      householdMonth,
       localToday,
       current,
       mine,
@@ -166,25 +183,32 @@ type HouseholdListResult = Awaited<ReturnType<typeof getHouseholdList>>;
 async function getBoundedHouseholdList(
   context: ReadModelContext,
   input: Omit<Parameters<typeof getHouseholdList>[1], "limit" | "offset">,
+  options: {
+    cap?: number;
+    failOnOverflow?: boolean;
+  } = {},
 ): Promise<HouseholdListResult> {
+  const cap = options.cap ?? HOUSEHOLD_ASSIGNMENT_CAP;
   const items: HouseholdListResult["items"] = [];
   let offset = 0;
   let nextOffset: number | null = 0;
-  while (nextOffset !== null && items.length < HOUSEHOLD_ASSIGNMENT_CAP) {
+  while (nextOffset !== null && items.length < cap) {
     const page = await getHouseholdList(context, {
       ...input,
-      limit: Math.min(READ_PAGE_SIZE, HOUSEHOLD_ASSIGNMENT_CAP - items.length),
+      limit: Math.min(READ_PAGE_SIZE, cap - items.length),
       offset,
     });
     items.push(...page.items);
     nextOffset = page.page.nextOffset;
     offset = nextOffset ?? offset;
   }
+  if (options.failOnOverflow && nextOffset !== null)
+    throw new ReadModelError(503);
   return {
     state: items.length === 0 ? "empty" : "ready",
     items,
     page: {
-      limit: HOUSEHOLD_ASSIGNMENT_CAP,
+      limit: cap,
       offset: 0,
       nextOffset,
     },
@@ -204,6 +228,26 @@ export function householdUpcomingWindow(localToday: string): {
   return {
     fromDate: addLocalDays(localToday, -6),
     toDate: addLocalDays(localToday, 30),
+  };
+}
+
+export function householdCalendarWindow(month: string): {
+  fromDate: string;
+  toDate: string;
+} {
+  const firstOfMonth = `${month}-01`;
+  const monthDate = new Date(`${firstOfMonth}T00:00:00Z`);
+  const lastDay = new Date(monthDate);
+  lastDay.setUTCMonth(lastDay.getUTCMonth() + 1);
+  lastDay.setUTCDate(0);
+  const lastOfMonth = lastDay.toISOString().slice(0, 10);
+  const gridStart = addLocalDays(firstOfMonth, -monthDate.getUTCDay());
+  const gridEnd = addLocalDays(lastOfMonth, 6 - lastDay.getUTCDay());
+  return {
+    // Periods are seven inclusive local dates. Include a possible period that
+    // ends on the first visible date of the leading calendar week.
+    fromDate: addLocalDays(gridStart, -6),
+    toDate: gridEnd,
   };
 }
 

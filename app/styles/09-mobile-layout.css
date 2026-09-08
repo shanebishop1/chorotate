@@ -1,12 +1,13 @@
 @media (max-width: 760px) {
   .site-header {
-    position: static;
+    position: sticky;
+    background: var(--canvas);
     backdrop-filter: none;
   }
 
   .header-row {
-    min-height: 62px;
-    padding: 8px 15px;
+    min-height: 57px;
+    padding: 6px max(13px, env(safe-area-inset-right)) 5px max(13px, env(safe-area-inset-left));
   }
 
   .signed-in > span:last-child {
@@ -16,14 +17,14 @@
   .primary-nav {
     position: fixed;
     z-index: 40;
-    right: 0;
+    right: env(safe-area-inset-right);
     bottom: 0;
-    left: 0;
+    left: env(safe-area-inset-left);
     display: grid;
-    width: 100%;
+    width: auto;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 3px;
-    padding: 6px 7px;
+    gap: 2px;
+    padding: 5px 6px 17px;
     border-top: 1px solid var(--line);
     background: var(--surface-raised);
     box-shadow: 0 -8px 30px rgb(22 17 10 / 11%);
@@ -31,26 +32,26 @@
 
   .primary-nav a {
     min-width: 0;
-    min-height: 56px;
+    min-height: 53px;
     flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    padding: 5px 2px;
-    border-radius: 11px;
-    font-size: 0.69rem;
+    justify-content: flex-end;
+    gap: 7px;
+    padding: 7px 13px 1px;
+    border-radius: 8px;
+    font-size: 0.66rem;
   }
 
   .primary-nav a[aria-current="page"] {
     border-color: transparent;
-    background: var(--relay-soft);
+    background: var(--surface-soft);
     box-shadow: none;
   }
 
   .primary-nav a[aria-current="page"]::after {
     top: 3px;
-    right: 35%;
-    bottom: auto;
-    left: 35%;
+    right: 13px;
+    bottom: 2px;
+    left: 13px;
   }
 
   .primary-nav .icon {
@@ -59,7 +60,7 @@
   }
 
   .main-content {
-    padding: 18px 15px calc(100px + env(safe-area-inset-bottom));
+    padding: 20px max(13px, env(safe-area-inset-right)) 28px max(13px, env(safe-area-inset-left));
   }
 
   .mock-banner {
@@ -67,17 +68,19 @@
   }
 
   .view-heading {
-    display: block;
-    margin-bottom: 27px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
   }
 
-  .view-heading h1 {
-    font-size: clamp(2.03rem, 11vw, 2.8rem);
+  .view-heading h1,
+  .mine-summary h1 {
+    font-size: 1.55rem;
   }
 
   .view-heading > .button {
-    width: 100%;
-    margin-top: 17px;
+    width: auto;
+    margin-top: 0;
   }
 
   .handoff-grid {
@@ -85,7 +88,7 @@
   }
 
   .handoff-card {
-    padding: 20px;
+    padding: 16px;
   }
 
   .coming-up {
@@ -103,7 +106,7 @@
 
   .schedule-list {
     display: grid;
-    gap: 25px;
+    gap: 9px;
   }
 
   .schedule-list .chore-glyph {
@@ -119,19 +122,13 @@
   }
 
   .schedule-list li:not(:last-child)::after {
-    position: absolute;
-    top: 49px;
-    bottom: -13px;
-    left: 27px;
-    width: 2px;
-    background: var(--line-strong);
-    content: "";
+    display: none;
   }
 
-  .schedule-list li.is-current {
-    border: 1px solid var(--now-line);
-    border-radius: 14px;
-    background: var(--now);
+  .schedule-list li {
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--surface);
   }
 
   .schedule-card-button {
@@ -140,7 +137,7 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 11px;
-    padding: 8px 32px 8px 9px;
+    padding: 11px;
     border-radius: inherit;
   }
 
@@ -172,22 +169,8 @@
     align-items: flex-start;
   }
 
-  .history-list > li {
-    grid-template-columns: 30px 1fr;
-    gap: 8px;
-  }
-
-  .history-list > li:not(:last-child)::before {
-    left: 14px;
-  }
-
-  .history-rail {
-    width: 30px;
-    height: 30px;
-  }
-
   .history-list article {
-    padding: 15px;
+    padding: 13px;
   }
 
   .history-meta {
@@ -196,8 +179,8 @@
   }
 
   .history-meta time {
-    width: 100%;
-    margin-left: 0;
+    width: auto;
+    margin-left: auto;
   }
 
   .history-legs {
@@ -205,7 +188,7 @@
   }
 
   .site-footer {
-    display: none;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   .toast {
@@ -254,11 +237,4 @@
     width: 100%;
   }
 
-  .swap-leg {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .swap-leg > p {
-    grid-column: 2;
-  }
 }

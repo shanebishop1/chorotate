@@ -14,11 +14,13 @@ import {
 } from "../domain/rotation/prepare";
 import type { RuntimeConfig } from "../runtime/environment";
 import {
+  householdCalendarWindow,
   householdUpcomingWindow,
   loadHomeData,
   shouldRevalidate,
 } from "./home";
 import { runHomeAction } from "./home-action";
+import { normalizeHouseholdMonth } from "../features/chore-relay/model";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const actor: AuthorizedMember = {
@@ -84,6 +86,38 @@ describe("home view navigation", () => {
         defaultShouldRevalidate: true,
       } as Parameters<typeof shouldRevalidate>[0]),
     ).toBe(false);
+  });
+
+  it("reloads private schedule data when the household month changes", () => {
+    expect(
+      shouldRevalidate({
+        currentUrl: new URL(
+          "https://app.example.test/?view=household&month=2026-08",
+        ),
+        nextUrl: new URL(
+          "https://app.example.test/?view=household&month=2026-09",
+        ),
+        formMethod: undefined,
+        defaultShouldRevalidate: true,
+      } as Parameters<typeof shouldRevalidate>[0]),
+    ).toBe(true);
+  });
+
+  it("pads a month query to include overlapping seven-day periods", () => {
+    expect(householdCalendarWindow("2026-09")).toEqual({
+      fromDate: "2026-08-24",
+      toDate: "2026-10-03",
+    });
+  });
+
+  it("falls back from month values outside the safe four-digit date range", () => {
+    const fallback = "2026-08";
+    expect(normalizeHouseholdMonth("0001-01", fallback)).toBe("0001-01");
+    expect(normalizeHouseholdMonth("9998-12", fallback)).toBe("9998-12");
+    expect(normalizeHouseholdMonth("0000-01", fallback)).toBe(fallback);
+    expect(normalizeHouseholdMonth("9999-12", fallback)).toBe(fallback);
+    expect(normalizeHouseholdMonth("2026-13", fallback)).toBe(fallback);
+    expect(normalizeHouseholdMonth("not-a-month", fallback)).toBe(fallback);
   });
 });
 
@@ -263,78 +297,103 @@ describe("authenticated home route integration", () => {
       "Dishwasher",
     );
     expect(result.household.periods).toHaveLength(8);
-    expect(result.householdList.items).toHaveLength(8);
+    expect(result.householdList.items).toHaveLength(3);
     expect(result.activeMembers).toHaveLength(4);
     expect(
       result.history.operations.every(({ changes }) => changes.length >= 1),
     ).toBe(true);
   });
 
-  it("loads the full household list once so range tabs switch without refetching", async () => {
+  it("loads the selected household month even when older assignments exceed the cap", async () => {
     const fixture = database();
-    await prepareCurrentSchedule(fixture.database, actor, { now });
-    fixture.sqlite
-      .prepare(
-        `INSERT INTO weekly_assignments
-         (id,household_id,local_week_start,chore_id,member_id,version,source,
-          actor_member_id,request_id,operation_id,operation_kind,occurred_at)
-         VALUES (?,?,?,?,?,1,'rotation',NULL,?,?, 'materialize',?)`,
-      )
-      .run(
-        "assignment:chorotate:2026-08-14:trash",
+    const insert = fixture.sqlite.prepare(
+      `INSERT INTO weekly_assignments
+       (id,household_id,local_week_start,chore_id,member_id,version,source,
+        actor_member_id,request_id,operation_id,operation_kind,occurred_at)
+       VALUES (?,?,?,?,?,1,'rotation',NULL,?,?, 'materialize',?)`,
+    );
+    const insertChore = fixture.sqlite.prepare(
+      `INSERT INTO chores
+       (id,household_id,name,active,created_at,instructions,ownership_start_weekday)
+       VALUES (?,?,?,1,?,?,5)`,
+    );
+    const supportedMonthStarts = [
+      "2026-08-28",
+      "2026-09-04",
+      "2026-09-11",
+      "2026-09-18",
+      "2026-09-25",
+      "2026-10-02",
+    ];
+    for (let index = 0; index < 48; index++) {
+      const choreId = `extra-${index}`;
+      insertChore.run(
+        choreId,
         "chorotate",
-        "2026-08-14",
+        `Extra chore ${index}`,
+        "2026-08-01T00:00:00Z",
+        "Extra chore instructions.",
+      );
+      for (const periodStart of supportedMonthStarts) {
+        insert.run(
+          `assignment:${choreId}:${periodStart}`,
+          "chorotate",
+          periodStart,
+          choreId,
+          "member-a",
+          `seed:${choreId}:${periodStart}`,
+          `seed:${choreId}:${periodStart}`,
+          `${periodStart}T00:00:00Z`,
+        );
+      }
+    }
+    for (let index = 0; index < 201; index++) {
+      const oldDate = new Date(Date.UTC(2020, 0, 3));
+      oldDate.setUTCDate(oldDate.getUTCDate() + index * 7);
+      insert.run(
+        `assignment:old:${index}`,
+        "chorotate",
+        oldDate.toISOString().slice(0, 10),
         "trash",
         "member-a",
-        "seed:past",
-        "seed:past",
-        "2026-08-14T00:00:00Z",
+        `seed:old:${index}`,
+        `seed:old:${index}`,
+        "2020-01-01T00:00:00Z",
       );
-
-    const upcoming = await loadHomeData(
-      new Request(`${config.canonicalOrigin}/?view=household&range=upcoming`),
-      fixture.database,
-      config,
-      loaderServices,
-    );
-    const allTime = await loadHomeData(
-      new Request(`${config.canonicalOrigin}/?view=household&range=all`),
-      fixture.database,
-      config,
-      loaderServices,
+    }
+    insert.run(
+      "assignment:chorotate:2026-08-24:dishwasher-overlap",
+      "chorotate",
+      "2026-08-24",
+      "dishwasher",
+      "member-c",
+      "seed:overlap",
+      "seed:overlap",
+      "2026-08-24T00:00:00Z",
     );
 
-    expect(
-      upcoming.state === "ready" &&
-        upcoming.householdList.items.some(
-          ({ assignmentId }) =>
-            assignmentId === "assignment:chorotate:2026-08-14:trash",
-        ),
-    ).toBe(true);
-    expect(
-      allTime.state === "ready" &&
-        allTime.householdList.items.some(
-          ({ assignmentId }) =>
-            assignmentId === "assignment:chorotate:2026-08-14:trash",
-        ),
-    ).toBe(true);
-    expect(upcoming.state === "ready" && upcoming.householdRange).toBe(
-      "upcoming",
-    );
-    expect(allTime.state === "ready" && allTime.householdRange).toBe("all");
-    if (upcoming.state !== "ready" || allTime.state !== "ready") return;
-    expect(upcoming.householdList.items).toHaveLength(107);
-    expect(upcoming.householdList.page.nextOffset).toBeNull();
-    expect(
-      upcoming.household.periods.every(
-        ({ period }) =>
-          period.localStartDate >= "2026-08-25" &&
-          period.localStartDate <= "2026-09-30",
+    const result = await loadHomeData(
+      new Request(
+        `${config.canonicalOrigin}/?view=household&month=2026-09&range=all`,
       ),
-    ).toBe(true);
-    expect(allTime.householdList.items).toHaveLength(107);
-    expect(allTime.householdList.page.nextOffset).toBeNull();
-    expect(allTime.assignmentCandidates).toHaveLength(106);
+      fixture.database,
+      config,
+      loaderServices,
+    );
+
+    expect(result.state).toBe("ready");
+    if (result.state !== "ready") return;
+    expect(result.householdMonth).toBe("2026-09");
+    expect(result.householdRange).toBe("all");
+    const assignmentIds = result.householdList.items.map(
+      ({ assignmentId }) => assignmentId,
+    );
+    expect(assignmentIds).toHaveLength(297);
+    expect(assignmentIds).toContain(
+      "assignment:chorotate:2026-08-24:dishwasher-overlap",
+    );
+    expect(assignmentIds).not.toContain("assignment:old:0");
+    expect(result.householdList.page.nextOffset).toBeNull();
   });
 
   it("performs a direct reassignment with server IDs and exposes it once in grouped history", async () => {
