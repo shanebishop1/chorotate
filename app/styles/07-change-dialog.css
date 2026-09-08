@@ -1,11 +1,11 @@
 .change-dialog {
-  width: min(590px, calc(100vw - 28px));
+  width: min(560px, calc(100vw - 28px));
   max-height: min(88dvh, 850px);
   padding: 0;
   overflow: hidden auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 16px;
   background: var(--surface-raised);
   color: var(--ink);
   box-shadow: var(--shadow-lg);
@@ -17,6 +17,7 @@
 }
 
 .change-dialog form {
+  position: relative;
   padding: 23px;
 }
 
@@ -25,15 +26,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding-right: 36px;
   padding-bottom: 17px;
   border-bottom: 1px solid var(--line);
 }
 
 .dialog-header h2 {
   margin-top: 2px;
-  font-family: Iowan Old Style, Georgia, serif;
+  font-family: inherit;
   font-size: 1.58rem;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: -0.025em;
 }
 
@@ -41,6 +43,19 @@
   margin-top: 3px;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.dialog-header .dialog-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: 1.35rem;
 }
 
 .member-picker {
@@ -56,7 +71,7 @@
   grid-column: 1 / -1;
   margin-bottom: 3px;
   font-size: 0.82rem;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .member-picker label {
@@ -69,6 +84,7 @@
   border: 1px solid var(--line);
   border-radius: 13px;
   background: var(--surface);
+  font-weight: 600;
 }
 
 .member-picker label.is-selected {
@@ -101,6 +117,37 @@
   font-size: 0.64rem;
 }
 
+.balance-choice {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.balance-choice h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.balance-choice > p {
+  margin: 5px 0 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.balance-choice .custom-dropdown-label {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.balance-choice .balance-empty {
+  margin-bottom: 0;
+  font-size: 0.7rem;
+}
+
 .swap-picker {
   position: relative;
   display: grid;
@@ -112,6 +159,10 @@
 
 .swap-picker .custom-dropdown {
   min-width: 0;
+}
+
+.swap-picker .custom-dropdown-label {
+  font-weight: 600;
 }
 
 .swap-glyph {
@@ -139,9 +190,9 @@
 
 .change-review h3 {
   margin: 2px 0 13px;
-  font-family: Iowan Old Style, Georgia, serif;
+  font-family: inherit;
   font-size: 1.16rem;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .review-route {
@@ -184,11 +235,9 @@
 }
 
 .swap-leg {
-  display: grid;
-  grid-template-columns: 55px 1fr auto;
+  display: block;
   align-items: center;
-  gap: 7px;
-  padding: 9px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--line);
   font-size: 0.74rem;
 }
@@ -208,6 +257,61 @@
   color: var(--relay-deep);
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.swap-leg > header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+
+.swap-leg > header > span {
+  color: var(--relay-deep);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.swap-leg > header .period-range {
+  grid-column: 2;
+}
+
+.swap-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.swap-route > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.swap-route .person {
+  grid-row: 1 / 3;
+}
+
+.swap-route small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.swap-route strong {
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap-route i {
+  color: var(--muted);
+  font-style: normal;
 }
 
 .simulation-control {
@@ -243,6 +347,7 @@
 
 .dialog-issue h3 {
   font-size: 0.87rem;
+  font-weight: 600;
 }
 
 .dialog-issue p {

@@ -118,6 +118,7 @@ const data: ChoreRelayData = {
     imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
   },
   householdRange: "upcoming",
+  householdMonth: "2026-08",
   localToday: "2026-08-31",
   current: {
     state: "ready",

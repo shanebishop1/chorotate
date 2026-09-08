@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 import type {
   HistoryOperation,
   ProjectedAssignment,
 } from "../../domain/read-models";
-import type { ChoreRelayView } from "./model";
+import { normalizeHouseholdMonth, type ChoreRelayView } from "./model";
 import { MiniCalendar } from "./mini-calendar";
 import {
   ChoreGlyph,
@@ -163,7 +163,23 @@ function HouseholdView({
   onReassign(assignmentId: string): void;
   onSwap(): void;
 }) {
-  const [visibleMonth, setVisibleMonth] = useState(data.localToday.slice(0, 7));
+  const location = useLocation();
+  const navigate = useNavigate();
+  const visibleMonth = normalizeHouseholdMonth(
+    new URLSearchParams(location.search).get("month"),
+    data.householdMonth,
+  );
+
+  function changeMonth(month: string) {
+    const search = new URLSearchParams(location.search);
+    search.set("view", "household");
+    search.set("month", month);
+    void navigate(
+      { search: `?${search.toString()}` },
+      { preventScrollReset: true },
+    );
+  }
+
   return (
     <section aria-labelledby="household-title">
       <ViewHeading
@@ -175,22 +191,32 @@ function HouseholdView({
           </button>
         }
       />
-      <TurnTallies
-        assignments={data.householdList.items}
-        truncated={data.householdList.page.nextOffset !== null}
-      />
+      <TurnTallies assignments={data.householdList.items} />
       {data.householdList.state === "empty" ? (
-        <SystemState kind="empty" />
-      ) : (
-        <MonthCalendar
-          assignments={data.householdList.items}
-          month={visibleMonth}
-          today={data.localToday}
-          onMonthChange={setVisibleMonth}
-          onReassign={onReassign}
-        />
-      )}
+        <HouseholdMonthEmptyState month={visibleMonth} />
+      ) : null}
+      <MonthCalendar
+        assignments={data.householdList.items}
+        month={visibleMonth}
+        today={data.localToday}
+        onMonthChange={changeMonth}
+        onReassign={onReassign}
+      />
     </section>
+  );
+}
+
+function HouseholdMonthEmptyState({ month }: { month: string }) {
+  return (
+    <div className="system-state state-empty" role="status">
+      <Icon name="calendar" />
+      <div>
+        <h2>No assignments this month</h2>
+        <p>
+          There are no household assignments in {calendarMonthHeading(month)}.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -226,11 +252,7 @@ function MonthCalendar({
   const weeks = Array.from({ length: dates.length / 7 }, (_, index) =>
     dates.slice(index * 7, index * 7 + 7),
   );
-  const heading = new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(monthDate);
+  const heading = calendarMonthHeading(month);
 
   return (
     <section
@@ -345,13 +367,15 @@ function MonthCalendar({
   );
 }
 
-function TurnTallies({
-  assignments,
-  truncated,
-}: {
-  assignments: ProjectedAssignment[];
-  truncated: boolean;
-}) {
+function calendarMonthHeading(month: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parseCalendarDate(`${month}-01`));
+}
+
+function TurnTallies({ assignments }: { assignments: ProjectedAssignment[] }) {
   const counts = new Map<
     string,
     { member: ProjectedAssignment["member"]; turns: number }
@@ -368,9 +392,7 @@ function TurnTallies({
   );
   return (
     <section className="turn-tallies" aria-labelledby="turn-tallies-title">
-      <h2 id="turn-tallies-title">
-        {truncated ? "Assigned turns shown" : "Assigned turns"}
-      </h2>
+      <h2 id="turn-tallies-title">Assigned turns shown</h2>
       <ul>
         {tallies.map(({ member, turns }) => (
           <li key={member.id}>

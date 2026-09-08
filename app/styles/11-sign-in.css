@@ -198,3 +198,9 @@ html[data-sign-in-intro="play"] .sign-in-panel .brand-mark .icon path {
     animation: none !important;
   }
 }
+
+@media (max-width: 760px) {
+  .sign-in-shell .site-footer {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}

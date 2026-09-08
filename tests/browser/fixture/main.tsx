@@ -141,6 +141,74 @@ const pastAssignment = {
   source: "rotation",
   reminder: reminder("trash", 0),
 } satisfies (typeof assignments)[number];
+const overlappingAssignment = {
+  assignmentId: "2026-08-24-dishwasher-overlap",
+  period: range("2026-08-24"),
+  chore: chores[1],
+  member: members[2],
+  version: 1,
+  source: "rotation",
+  reminder: reminder("dishwasher", 3),
+} satisfies (typeof assignments)[number];
+const octoberAssignment = {
+  assignmentId: "2026-10-02-trash",
+  period: range("2026-10-02"),
+  chore: chores[0],
+  member: members[1],
+  version: 1,
+  source: "rotation",
+  reminder: reminder("trash", 3),
+} satisfies (typeof assignments)[number];
+const olderAssignments = Array.from({ length: 201 }, (_, index) => {
+  const periodStart = new Date(Date.UTC(2020, 0, 1 + index * 7))
+    .toISOString()
+    .slice(0, 10);
+  return {
+    ...pastAssignment,
+    assignmentId: `older-${index}`,
+    period: range(periodStart),
+  };
+});
+const allHouseholdAssignments = [
+  ...olderAssignments,
+  pastAssignment,
+  overlappingAssignment,
+  octoberAssignment,
+  ...assignments,
+];
+
+function householdCalendarWindow(month: string) {
+  const firstOfMonth = `${month}-01`;
+  const monthDate = new Date(`${firstOfMonth}T00:00:00Z`);
+  const lastDay = new Date(monthDate);
+  lastDay.setUTCMonth(lastDay.getUTCMonth() + 1);
+  lastDay.setUTCDate(0);
+  const lastOfMonth = lastDay.toISOString().slice(0, 10);
+  const gridStart = addDays(firstOfMonth, -monthDate.getUTCDay());
+  return {
+    fromDate: addDays(gridStart, -6),
+    toDate: addDays(lastOfMonth, 6 - lastDay.getUTCDay()),
+  };
+}
+
+function addDays(localDate: string, days: number): string {
+  const date = new Date(`${localDate}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function householdAssignmentsForMonth(month: string) {
+  const window = householdCalendarWindow(month);
+  return allHouseholdAssignments
+    .filter(
+      ({ period }) =>
+        period.localStartDate >= window.fromDate &&
+        period.localStartDate <= window.toDate,
+    )
+    .sort((a, b) =>
+      a.period.localStartDate.localeCompare(b.period.localStartDate),
+    );
+}
 const historyAssignments = chores.map((chore) =>
   assignments.find((item) => item.chore.id === chore.id)!,
 );
@@ -153,6 +221,7 @@ const data: ChoreRelayData = {
     imageUrl: "https://lh3.googleusercontent.com/a/profile-photo",
   },
   householdRange: "upcoming",
+  householdMonth: "2026-08",
   localToday: "2026-08-31",
   current: {
     state: "ready",
@@ -249,14 +318,20 @@ function Fixture() {
   const endedAssignment = endedAssignments.find(
     ({ chore }) => chore.id === endedChore,
   );
-  // The loader always provides the full list; the shell picks the range tab
-  // client-side from the URL with no refetch.
+  const requestedMonth = search.get("month");
+  const month =
+    requestedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)
+      ? requestedMonth
+      : data.householdMonth;
+  const monthAssignments = householdAssignmentsForMonth(month);
   const rangeData: ChoreRelayData = {
     ...data,
     householdRange: search.get("range") === "all" ? "all" : "upcoming",
+    householdMonth: month,
     householdList: {
       ...data.householdList,
-      items: [pastAssignment, ...data.householdList.items],
+      state: monthAssignments.length === 0 ? "empty" : "ready",
+      items: monthAssignments,
     },
   };
   const fixtureData = endedAssignment

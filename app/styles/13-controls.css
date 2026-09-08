@@ -47,6 +47,10 @@
   text-transform: uppercase;
 }
 
+.filter-row .custom-dropdown-label {
+  font-weight: 650;
+}
+
 .custom-dropdown-trigger {
   display: grid;
   width: 100%;
@@ -155,6 +159,7 @@
   flex: none;
   color: var(--muted);
   font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .turn-tallies ul {
@@ -188,3 +193,19 @@
   height: 24px;
 }
 
+@media (max-width: 760px) {
+  .turn-tallies {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .range-control {
+    display: flex;
+    width: 100%;
+  }
+
+  .range-control a {
+    flex: 1;
+    justify-content: center;
+  }
+}

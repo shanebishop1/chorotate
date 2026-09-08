@@ -2,9 +2,9 @@
   padding: 8px;
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 13px;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .filter-row {
@@ -27,9 +27,28 @@
 
 .schedule-table {
   width: 100%;
-  min-width: 820px;
+  min-width: 680px;
   border-collapse: separate;
   border-spacing: 8px;
+  table-layout: fixed;
+}
+
+.schedule-table tbody tr {
+  height: 82px;
+}
+
+.schedule-table tbody th,
+.schedule-table tbody td {
+  height: 82px;
+  vertical-align: middle;
+}
+
+.schedule-table thead th:first-child,
+.schedule-table thead th:nth-child(2),
+.schedule-table thead th:nth-child(3),
+.schedule-table tbody th,
+.schedule-table tbody td {
+  width: 33.333%;
 }
 
 .schedule-table caption {
@@ -144,6 +163,12 @@
   flex-direction: column;
 }
 
+.schedule-person > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .schedule-person strong {
   font-size: 0.82rem;
 }
@@ -162,6 +187,10 @@
 .schedule-person .now-badge,
 .schedule-list .now-badge {
   width: fit-content;
+  margin-top: 6px;
+}
+
+.schedule-table td > .now-badge {
   margin-top: 6px;
 }
 

@@ -28,6 +28,7 @@
 
 .month-calendar-header h2 {
   font-size: 1.12rem;
+  font-weight: 600;
 }
 
 .month-calendar-header .icon-button {
@@ -187,3 +188,44 @@
   }
 }
 
+@media (max-width: 760px) {
+  .month-calendar-header {
+    padding: 11px 10px;
+  }
+
+  .month-week {
+    min-height: 84px;
+  }
+
+  .month-days time {
+    padding: 6px 5px 4px;
+    font-size: 0.64rem;
+  }
+
+  .month-assignment-lanes {
+    grid-auto-rows: 28px;
+    padding-inline: 2px;
+  }
+
+  .month-assignment {
+    height: 28px;
+    gap: 3px;
+    margin-inline: 1px;
+    padding: 3px 4px;
+    border-left-width: 2px;
+  }
+
+  .month-assignment .chore-glyph {
+    flex-basis: 17px;
+  }
+
+  .month-assignment .person {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+  }
+
+  .month-assignment strong {
+    font-size: 0.62rem;
+  }
+}
