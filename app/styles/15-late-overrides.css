@@ -113,7 +113,7 @@
 }
 
 .handoff-card > .mini-calendar {
-  margin-left: 63px;
+  margin-inline: auto;
 }
 
 .mine-timeline article > .mini-calendar {
@@ -153,7 +153,7 @@
   }
 
   .handoff-card > .mini-calendar {
-    margin-left: 0;
+    margin-inline: auto;
   }
 
   .mine-timeline article {

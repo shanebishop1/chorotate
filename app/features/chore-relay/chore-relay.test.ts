@@ -272,7 +272,8 @@ describe("Chore Relay integrated rendering", () => {
     expect(household).toContain("Previous month");
     expect(household).toContain("Next month");
     expect(household).toContain("Assigned turns");
-    expect(household).toContain("Swap two turns");
+    expect(household).toContain("Schedule");
+    expect(household).toContain("Swap");
     expect(household).toContain("Reassign Trash");
     expect(household).not.toContain("Upcoming");
     expect(household).not.toContain("All time");
@@ -289,6 +290,7 @@ describe("Chore Relay integrated rendering", () => {
     const html = render("now");
     expect(html).toContain("Morning reminder");
     expect(html.match(/Morning reminder/g)).toHaveLength(1);
+    expect(html.match(/class="current-period-row"/g)).toHaveLength(2);
     expect(html.match(/reminder-status is-reserved/g)).toHaveLength(2);
     expect(html).not.toMatch(
       /evening reminder|accepted for sending|delivery unconfirmed|reminder missed|reminder contact|reminder consent|reminders suppressed/i,
@@ -297,7 +299,7 @@ describe("Chore Relay integrated rendering", () => {
 
   it("groups both atomic swap legs in visible History", () => {
     const html = render("history");
-    expect(html).toContain("Atomic swap");
+    expect(html).toContain("Swap");
     expect(html).toContain("Swap leg 1 of 2");
     expect(html).toContain("Swap leg 2 of 2");
     expect(html.match(/<span>Ownership range<\/span>/g)).toHaveLength(2);
@@ -354,8 +356,12 @@ describe("Chore Relay integrated rendering", () => {
     expect(html).toContain("month-calendar");
   });
 
-  it("omits promotional and legal footer content", () => {
+  it("links to the source repository without promotional or legal content", () => {
     const html = render("now");
+    expect(html).toContain('href="https://github.com/shanebishop1/chorotate"');
+    expect(html).toContain('aria-label="ChoRotate on GitHub"');
+    expect(html).toContain("Shane Bishop");
+    expect(html).toContain("2026");
     expect(html).not.toContain("One home. Clear handoffs");
     expect(html).not.toContain("Authoritative household schedule");
     expect(html).not.toContain('href="/privacy"');

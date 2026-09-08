@@ -14,8 +14,24 @@
   --shutter-primary: #d95f32;
   --shutter-secondary: #f3f1eb;
   position: relative;
+  display: flex;
+  flex-direction: column;
   isolation: isolate;
   scrollbar-gutter: auto;
+}
+
+.sign-in-shell .sign-in-page {
+  min-height: 0;
+  flex: 1;
+}
+
+.sign-in-shell .site-footer {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  flex: none;
 }
 
 html[data-theme="dark"] .app-shell.sign-in-shell {

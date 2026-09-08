@@ -43,6 +43,7 @@ export function ShellChrome({
             />
           </div>
         </main>
+        <SiteFooter />
         <div className="sign-in-shutters" aria-hidden="true">
           {Array.from({ length: 10 }, (_, index) => (
             <span key={index} />
@@ -116,7 +117,26 @@ export function ShellChrome({
       <main id="main-content" className="main-content" tabIndex={-1}>
         {children}
       </main>
+      <SiteFooter />
     </div>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <a
+        href="https://github.com/shanebishop1/chorotate"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="ChoRotate on GitHub"
+      >
+        <Icon name="github" />
+      </a>
+      <span>
+        Shane Bishop <span aria-hidden="true">|</span> 2026
+      </span>
+    </footer>
   );
 }
 

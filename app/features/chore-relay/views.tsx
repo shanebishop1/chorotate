@@ -76,13 +76,15 @@ function NowView({
                     <h2>{chore.name}</h2>
                   </div>
                 </div>
-                <PeriodRange range={currentPeriod} label="Current period" />
+                <div className="current-period-row">
+                  <PeriodRange range={currentPeriod} label="Current period" />
+                  <ReminderStatus reminder={assignment.reminder} reserveSpace />
+                </div>
                 <MiniCalendar
                   range={currentPeriod}
                   today={data.localToday}
                   label={`${chore.name} current period`}
                 />
-                <ReminderStatus reminder={assignment.reminder} reserveSpace />
                 <p className="chore-description">{chore.instructions}</p>
                 {next ? (
                   <div className="handoff-strip">
@@ -99,7 +101,7 @@ function NowView({
                   type="button"
                   onClick={() => onReassign(assignment.assignmentId)}
                 >
-                  Reassign this turn <span aria-hidden="true">→</span>
+                  Reassign <span aria-hidden="true">→</span>
                 </button>
               </article>
             ) : null,
@@ -166,10 +168,10 @@ function HouseholdView({
     <section aria-labelledby="household-title">
       <ViewHeading
         id="household-title"
-        title="Household schedule"
+        title="Schedule"
         action={
           <button className="button secondary" type="button" onClick={onSwap}>
-            <Icon name="swap" /> Swap two turns
+            <Icon name="swap" /> Swap
           </button>
         }
       />
@@ -411,7 +413,7 @@ function HistoryItem({ operation }: { operation: HistoryOperation }) {
         <div className="history-meta">
           <span className={`event-badge ${operation.kind}`}>
             {operation.kind === "swap"
-              ? "Atomic swap"
+              ? "Swap"
               : operation.kind === "reassign"
                 ? "Direct change"
                 : "Schedule update"}

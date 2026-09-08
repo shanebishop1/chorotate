@@ -48,7 +48,6 @@ export function ReassignReview({
 }) {
   return (
     <section className="change-review" aria-labelledby="review-title">
-      <p className="eyebrow">Before → after</p>
       <h3 id="review-title">Review this change</h3>
       <div className="review-route">
         <span>
@@ -83,7 +82,6 @@ export function SwapReview({
       className="change-review swap-review"
       aria-labelledby="swap-review-title"
     >
-      <p className="eyebrow">Before → after</p>
       <h3 id="swap-review-title">Review both swap legs</h3>
       <SwapLeg index={1} assignment={first} to={second.member} />
       <SwapLeg index={2} assignment={second} to={first.member} />

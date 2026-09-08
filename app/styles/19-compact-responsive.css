@@ -37,7 +37,15 @@
   }
 
   .main-content {
-    padding: 20px max(13px, env(safe-area-inset-right)) calc(88px + env(safe-area-inset-bottom)) max(13px, env(safe-area-inset-left));
+    padding: 20px max(13px, env(safe-area-inset-right)) 28px max(13px, env(safe-area-inset-left));
+  }
+
+  .site-footer {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .sign-in-shell .site-footer {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 
   .view-heading {
