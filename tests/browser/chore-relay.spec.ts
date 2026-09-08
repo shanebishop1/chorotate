@@ -4,7 +4,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 const views = [
   ["now", "On duty"],
   ["mine", "Your upcoming chores"],
-  ["household", "Household schedule"],
+  ["household", "Schedule"],
   ["history", "Recent changes"],
 ] as const;
 
@@ -76,9 +76,7 @@ test("view changes keep the header and content rails stationary", async ({
   expect(await positions()).toEqual(before);
 
   await page.getByRole("link", { name: "Household" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Household schedule" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
   expect(await positions()).toEqual(before);
 });
 
@@ -278,7 +276,7 @@ test("custom dropdown supports keyboard, mouse, tab, escape, and outside dismiss
   page,
 }) => {
   await page.goto("/?view=household");
-  await page.getByRole("button", { name: "Swap two turns" }).click();
+  await page.getByRole("button", { name: "Swap" }).click();
   await expect(page.locator("select")).toHaveCount(0);
   const trigger = page.locator("#first-assignment-button");
   await expect(trigger).toHaveAccessibleName(
@@ -333,17 +331,11 @@ test("Household owns swap and every rendered on-duty cell opens its assignment",
   page,
 }) => {
   await page.goto("/?view=now");
-  await expect(
-    page.getByRole("button", { name: "Swap two turns" }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: /Reassign this turn/ }),
-  ).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Swap" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reassign" })).toHaveCount(2);
 
   await page.getByRole("link", { name: "Household" }).click();
-  await expect(
-    page.getByRole("button", { name: "Swap two turns" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Swap" })).toBeVisible();
   await page.getByRole("button", { name: "Next month" }).click();
   const cell = page
     .getByRole("button", { name: /Reassign Trash, Fri, Sep 18/ })
@@ -359,12 +351,14 @@ test("two-step reassign submits exact one-time and optional balanced-swap payloa
   page,
 }) => {
   await page.goto("/?view=now");
-  const open = page.getByRole("button", { name: /Reassign this turn/ }).first();
+  const open = page.getByRole("button", { name: "Reassign" }).first();
   await open.click();
   const dialog = page.locator(".change-dialog");
   await expect(dialog).not.toContainText("Who will take it?");
+  await expect(dialog).not.toContainText("Active household member");
   await page.getByRole("radio", { name: /Member D/ }).check();
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(dialog).not.toContainText("Before → after");
   await expect(
     page.getByRole("dialog", { name: "Review Trash change" }),
   ).toContainText("extra turn");
@@ -416,9 +410,7 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
   page,
 }) => {
   await page.goto("/?view=now");
-  const opener = page
-    .getByRole("button", { name: /Reassign this turn/ })
-    .first();
+  const opener = page.getByRole("button", { name: "Reassign" }).first();
   await opener.focus();
   await opener.press("Enter");
 
@@ -465,7 +457,7 @@ test("dialog closes only from its backdrop and protects pending changes", async 
   page,
 }) => {
   await page.goto("/?view=household&pending=1");
-  const opener = page.getByRole("button", { name: "Swap two turns" });
+  const opener = page.getByRole("button", { name: "Swap" });
   await opener.click();
   const dialog = page.getByRole("dialog", { name: "Swap two turns" });
 
@@ -481,6 +473,7 @@ test("dialog closes only from its backdrop and protects pending changes", async 
   await opener.click();
   await chooseDropdown(page, "First turn", "2026-08-28-trash");
   await chooseDropdown(page, "Second turn", "2026-08-31-dishwasher");
+  await expect(dialog).not.toContainText("Before → after");
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Saving…" })).toBeDisabled();
   const pendingBox = await dialog.boundingBox();
@@ -559,6 +552,43 @@ test("mini calendars expose active ownership dates and the local today marker", 
   await expect(
     page.locator('.mini-calendar [data-in-range="true"]'),
   ).toHaveCount(14);
+});
+
+test("on-duty cards center calendars and reserve stable reminder slots", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  const geometry = await page.locator(".handoff-card").evaluateAll((cards) =>
+    cards.map((card) => {
+      const cardBox = card.getBoundingClientRect();
+      const calendarBox = card
+        .querySelector(".mini-calendar")!
+        .getBoundingClientRect();
+      const rowBox = card
+        .querySelector(".current-period-row")!
+        .getBoundingClientRect();
+      const reminderBox = card
+        .querySelector(".reminder-status")!
+        .getBoundingClientRect();
+      return {
+        calendarCenterOffset:
+          calendarBox.left +
+          calendarBox.width / 2 -
+          (cardBox.left + cardBox.width / 2),
+        reminderRightOffset: rowBox.right - reminderBox.right,
+        reminderWidth: reminderBox.width,
+        rowHeight: rowBox.height,
+      };
+    }),
+  );
+
+  expect(geometry).toHaveLength(2);
+  for (const card of geometry) {
+    expect(Math.abs(card.calendarCenterOffset)).toBeLessThan(1);
+    expect(Math.abs(card.reminderRightOffset)).toBeLessThan(1);
+  }
+  expect(geometry[0]!.reminderWidth).toBe(geometry[1]!.reminderWidth);
+  expect(geometry[0]!.rowHeight).toBe(geometry[1]!.rowHeight);
 });
 
 test("household calendar moves between months without navigation", async ({
@@ -640,7 +670,7 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   page,
 }) => {
   await page.goto("/?view=household");
-  await page.getByRole("button", { name: "Swap two turns" }).click();
+  await page.getByRole("button", { name: "Swap" }).click();
   const dialog = page.getByRole("dialog", { name: "Swap two turns" });
   await expect(dialog).toBeVisible();
   await chooseDropdown(page, "First turn", "2026-08-28-trash");
@@ -693,10 +723,7 @@ test("stale recovery names refreshed ownership values and requires intentional r
   page,
 }) => {
   await page.goto("/?view=now");
-  await page
-    .getByRole("button", { name: /Reassign this turn/ })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Reassign" }).first().click();
   const dialog = page.locator(".change-dialog");
   await page.getByRole("radio", { name: /Member B/ }).check();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -745,7 +772,7 @@ for (const ended of [
     const choreCard = page
       .getByRole("article")
       .filter({ hasText: ended.chore });
-    await choreCard.getByRole("button", { name: "Reassign this turn" }).click();
+    await choreCard.getByRole("button", { name: "Reassign" }).click();
     const dialog = page.locator(".change-dialog");
     await expect(dialog).toHaveAccessibleName(`Reassign ${ended.chore}`);
     await page.getByRole("radio", { name: /Member A/ }).check();
@@ -773,7 +800,7 @@ test("skip navigation, visible focus, fitted controls, and reduced motion work",
   await expect(page.locator("#main-content")).toBeFocused();
 
   await page.getByRole("link", { name: "Household" }).click();
-  const fitted = page.getByRole("button", { name: "Swap two turns" });
+  const fitted = page.getByRole("button", { name: "Swap" });
   const fit = await fitted.evaluate((button) => ({
     clientWidth: button.clientWidth,
     scrollWidth: button.scrollWidth,

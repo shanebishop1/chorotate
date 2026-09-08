@@ -288,6 +288,12 @@ command-line argument.
 Run these steps in order. The commands marked **script** are automated wrappers;
 the choices and environment setup around them remain manual.
 
+If `CHOROTATE_CF_API_TOKEN` is present, the repository's deployment and
+operator wrappers map it to Wrangler authentication automatically. Run the
+wrapper commands directly; do not use a failed `npx wrangler whoami` check to
+conclude that deployment credentials are unavailable, because direct Wrangler
+commands only recognize `CLOUDFLARE_API_TOKEN`.
+
 1. **Script:** build and validate the deployment without uploading it:
 
    ```sh

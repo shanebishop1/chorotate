@@ -69,6 +69,29 @@
   font-weight: 650;
 }
 
+.current-period-row {
+  display: grid;
+  min-height: 33px;
+  grid-template-columns: minmax(0, 1fr) 121px;
+  align-items: start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.current-period-row > .period-range,
+.current-period-row > .reminder-status {
+  margin-top: 0;
+}
+
+.current-period-row > .reminder-status {
+  width: 121px;
+  justify-content: flex-end;
+}
+
+.current-period-row > .reminder-status li {
+  white-space: nowrap;
+}
+
 .person {
   border: 0;
   font-size: 1rem;

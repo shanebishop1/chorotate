@@ -298,6 +298,40 @@ html[data-theme="dark"] .theme-icon-dark {
   animation: content-in 140ms ease-out;
 }
 
+.site-footer {
+  display: flex;
+  width: min(980px, 100%);
+  min-height: 72px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  color: var(--muted);
+  font-size: 0.69rem;
+}
+
+.site-footer a {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--muted);
+  place-items: center;
+  text-decoration: none;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.site-footer .icon {
+  width: 16px;
+  height: 16px;
+}
+
 @keyframes content-in {
   from {
     opacity: 0;

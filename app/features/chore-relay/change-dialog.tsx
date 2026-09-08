@@ -212,9 +212,7 @@ export function ChangeDialog({
                       <Person member={member} size="small" />
                       <span>
                         <strong>{member.displayName}</strong>
-                        <small>
-                          {current ? "On it now" : "Active household member"}
-                        </small>
+                        {current ? <small>On it now</small> : null}
                       </span>
                     </label>
                   );
