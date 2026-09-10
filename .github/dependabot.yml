@@ -8,6 +8,10 @@ updates:
       npm:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
