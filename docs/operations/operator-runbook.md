@@ -1,247 +1,127 @@
 # ChoRotate operator runbook
 
-This runbook is for the person deploying a household instance of ChoRotate. It
-uses a Cloudflare Worker and D1 database, with Google OAuth for production
-sign-in. Keep production contact JSON and generated SQL private. Commands below
-are run from the repository root.
+One person configures the household in JSON and deploys it. Roommates only need
+the URL and Google sign-in. For local use, follow the [README](../../README.md#run-locally)
+or the [optional demo seed](#fast-local-development-no-oauth).
 
-## What is manual and what is automated
+Commands use macOS/Linux or Windows WSL with Bash/Zsh, from the repository root.
+Keep `.dev.vars`, `.chorotate/production.env`, household JSON, and generated SQL
+private. Do not commit them or paste their contents into logs or support tickets.
 
-**Manual:** Google Cloud Console, Cloudflare Dashboard, copying/editing the
-private household JSON, choosing environment values, entering secret values,
-and deciding whether SMS is enabled.
+## Deploy your household
 
-**Automated by repository scripts:** `operator:bootstrap:prepare` validates a
-private JSON document and creates private SQL; `operator:bootstrap:local`
-migrates and bootstraps local D1; `operator:d1:*` runs fixed remote D1
-operations; `operator:d1:verify` runs a redacted structural verification; and
-`deploy:production` builds a temporary production Wrangler configuration and
-deploys it. These scripts intentionally do not print contact values, but some
-generated SQL/query text is passed to Wrangler as a process argument; keep the
-terminal and process list private while running them.
+Follow steps 1-7 with a Cloudflare account and access to Google Cloud Console.
+Local setup, a custom domain, and a Textbelt account are not required. Start with
+SMS off. Check Cloudflare's current
+[Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
+[D1](https://developers.cloudflare.com/d1/platform/pricing/) quotas/pricing;
+optional SMS requires provider credit.
 
-## Prerequisites
+### 1. Prepare the project
 
-1. Install Git, [Mise](https://mise.jdx.dev/), and a supported shell.
-2. Clone the repository, then run:
-
-   ```sh
-   mise install
-   npm ci
-   ```
-
-3. Have access to the Cloudflare account that will own the Worker and D1
-   database. Have a Google account available for Google Cloud Console and for
-   the OAuth test users.
-
-## Fast local development: no OAuth
-
-This is the recommended local smoke-test path. It uses the checked-in neutral
-demo seed and the development-only local auth implementation. It does not call
-Google, Cloudflare, or an SMS provider.
+Install Git and [Mise](https://mise.jdx.dev/getting-started.html), including shell
+activation. Clone this repository or your own fork:
 
 ```sh
-cp .dev.vars.example .dev.vars
-npx wrangler d1 migrations apply chorotate-local --local
-npm run seed:local
-npm run dev
-```
-
-`.dev.vars` is local-only and ignored by Git. Do not copy production Google,
-Textbelt, or household values into it.
-
-Open <http://localhost:5173> and use the sign-in control. In a Vite
-development build, the control posts to `/api/auth/local`; the server accepts
-it only on loopback when `LOCAL_AUTH_ENABLED=true` and the seeded
-`local-dev-user` identity exists. The local session lasts seven days. Signing
-out posts to `/api/auth/local/sign-out`.
-
-The demo path intentionally contains placeholder identities and two demo
-chores. It is separate from the custom bootstrap path below.
-
-### Custom local household
-
-Use this alternate path when you want custom names, emails, chores, or
-rotations. It is first-run-only and requires an empty local D1 database. The
-wrapper applies local migrations itself; do not run `npm run seed:local` first.
-Its first configured member is bound to the development-only `local-dev-user`,
-so this custom path also works with the no-OAuth sign-in control.
-
-```sh
-cp .dev.vars.example .dev.vars
-mkdir -p .chorotate
-cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
-chmod 600 .chorotate/operator-bootstrap.json
-```
-
-Edit the copied private JSON, then run:
-
-```sh
-npm run operator:bootstrap:local -- \
-  --input .chorotate/operator-bootstrap.json \
-  --time-zone America/New_York \
-  --week-start monday \
-  --evening-time 20:00 \
-  --morning-time 08:00
-npm run dev
-```
-
-The command applies migrations and executes generated bootstrap SQL. The JSON
-must remain mode `0600`, outside the repository, or below `.chorotate/`.
-`householdId` must remain `chorotate`. Edit `householdName`, each member's
-safe lowercase `id`, display name, normalized lowercase email, and optional
-phone/consent fields. In `chores`, edit each chore's `id`, name, instructions,
-`ownershipStartWeekday`, and rotation `memberIds` order. Each rotation's
-`effectiveFrom` date must fall on its ownership weekday, and its member list
-must contain every member exactly once.
-
-The local wrapper adds `local-dev-user` and binds it to the first member in the
-JSON. The local sign-in control therefore works with these custom names and
-chores without Google OAuth. The wrapper passes SQL through a temporary mode-`0600`
-file, suppresses provider output, disables Wrangler disk logs, and removes the
-temporary file afterward. It never puts roommate details in command arguments.
-
-If this checkout has already used `npm run seed:local`, do not delete or reset
-the local D1 files. Use a separate clone for the custom first-run path:
-
-```sh
-cd ..
-git clone https://github.com/shanebishop1/chorotate.git chorotate-custom-local
-cd chorotate-custom-local
+git clone https://github.com/shanebishop1/chorotate.git
+cd chorotate
 mise install
 npm ci
-cp .dev.vars.example .dev.vars
+```
+
+Already set up locally? Reuse that checkout and skip these commands. Local and
+remote databases are separate; local data is not uploaded.
+
+### 2. Create the Cloudflare resources
+
+Sign in and confirm you selected the intended account:
+
+```sh
+npx wrangler login
+npx wrangler whoami
+```
+
+For a remote terminal, use `npx wrangler login --device` instead of `login`.
+API-token users can use `CLOUDFLARE_API_TOKEN`; repository wrappers also accept
+`CHOROTATE_CF_API_TOKEN`. Direct `npx wrangler` commands only recognize the former.
+
+In **Cloudflare Dashboard > Workers & Pages**, choose or confirm your
+`workers.dev` subdomain. Your app's origin will be:
+
+```text
+https://chorotate-production.<account-subdomain>.workers.dev
+```
+
+Replace `<account-subdomain>`; keep `chorotate-production`. Use this exact origin
+in steps 3-4, without a trailing slash.
+
+Create the production D1 database:
+
+```sh
+npx wrangler d1 create chorotate-production --update-config=false
+```
+
+Keep the database UUID for step 4; do not edit `wrangler.jsonc`. If the database
+already exists, reuse its UUID.
+
+### 3. Register Google sign-in
+
+Open [Google Cloud Console](https://console.cloud.google.com/) and create or
+select a project for this app. Under **Google Auth Platform**:
+
+1. **Branding:** enter the app name, support email, and developer contact; complete the setup acknowledgement.
+2. **Audience:** choose **External** for personal Google accounts or mixed organizations. Use **Internal** only if everyone belongs to the same eligible Workspace organization. If the app is in testing, add your household's Google email addresses as test users.
+3. **Data Access:** use only `openid`, `email`, and `profile`. No Google Calendar API or sensitive scopes are needed.
+4. **Clients > Create Client:** choose **Web application**, then enter the origin and redirect URI below.
+
+```text
+Authorized JavaScript origin:
+https://chorotate-production.<account-subdomain>.workers.dev
+
+Authorized redirect URI:
+https://chorotate-production.<account-subdomain>.workers.dev/api/auth/callback/google
+```
+
+Save the client ID and secret in a password manager for step 6. Publishing the
+OAuth app is not required for listed test users; follow Google's requirements
+if you later expand its audience.
+
+### 4. Configure the household and deployment
+
+If local setup already created your private household JSON, reuse it; do not
+overwrite it with the example. Otherwise:
+
+```sh
 mkdir -p .chorotate
 cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
 chmod 600 .chorotate/operator-bootstrap.json
 ```
 
-Edit that copy and run the `operator:bootstrap:local` command above from the
-new clone. This preserves the previously seeded checkout and gives the custom
-bootstrap its required empty local database.
+Edit the JSON using the [household field guide](#household-configuration).
+Use the exact Google email addresses your roommates will sign in with. Leave
+phones as `null` and consent as `not_recorded` for this initial no-SMS setup.
 
-## Google Cloud Console: create the OAuth client
-
-These are **manual** Google Cloud Console steps. Google periodically changes
-navigation labels; the current console groups these settings under **Google
-Auth Platform**.
-
-1. Create or select a Google Cloud project at
-   <https://console.cloud.google.com/>. Keep this project dedicated to this
-   ChoRotate deployment.
-2. Open **Google Auth Platform > Branding** and select **Get Started** if the
-   platform is not configured. Set the app name, user support email, and
-   developer/contact email. Complete the policy acknowledgement.
-3. Open **Google Auth Platform > Audience**. Choose **External** for a
-   household whose members are not all in one Google Workspace organization.
-   Choose **Internal** only when every user is in the owning Workspace
-   organization. While the app is in testing, add every intended sign-in
-   address under **Test users**.
-4. Open **Google Auth Platform > Data Access > Add or Remove Scopes**. Request
-   only the basic sign-in scopes this app needs: `openid`, `email`, and
-   `profile`. ChoRotate's calendar is an application calendar; it does **not**
-   need Google Calendar API access. Do not add Drive, Calendar, or other
-   sensitive scopes.
-5. Open **Google Auth Platform > Clients > Create Client**. Choose **Web
-   application**. Add the exact production origin as an **Authorized
-   JavaScript origin**, and add the exact callback as an **Authorized redirect
-   URI**:
-
-   ```text
-   Origin:   https://chorotate-production.<account-subdomain>.workers.dev
-   Callback: https://chorotate-production.<account-subdomain>.workers.dev/api/auth/callback/google
-   ```
-
-   Replace `<account-subdomain>` with the workers.dev subdomain selected in
-   Cloudflare. Do not add a path to the origin, and do not add a trailing slash
-   to either value. The application constructs the callback as
-   `<CANONICAL_ORIGIN>/api/auth/callback/google`.
-
-6. Save the client ID and client secret in a password manager. Do not commit
-   them or put them in `wrangler.jsonc`.
-7. Keep the Google app in testing until the household is ready. When the
-   household should no longer be limited to test users, use the Audience
-   publishing control to publish it. If Google requests verification, follow
-   Google's OAuth verification process; publishing is not a substitute for
-   that review.
-
-Google's references: [configure the OAuth consent screen and scopes](https://developers.google.com/workspace/marketplace/configure-oauth-consent-screen),
-[OAuth web-server redirect URI rules](https://developers.google.com/identity/protocols/oauth2/web-server),
-and [Google Auth Platform help](https://support.google.com/cloud/answer/15544987).
-
-## Cloudflare account and resources
-
-These are **manual commands or dashboard actions**. Run the commands after
-installing dependencies.
-
-1. Authenticate Wrangler and confirm the account:
-
-   ```sh
-   npx wrangler login
-   npx wrangler whoami
-   ```
-
-    For a remote terminal, `npx wrangler login --device` avoids the local
-    callback server. A CI/API-token setup may use `CLOUDFLARE_API_TOKEN`
-    instead. The repository's `operator:*` and deployment wrappers also accept
-    `CHOROTATE_CF_API_TOKEN` and map it to Wrangler's token input without
-    writing it to a file; direct `npx wrangler` commands use
-    `CLOUDFLARE_API_TOKEN`.
-
-2. In the Cloudflare Dashboard, open **Workers & Pages** and select **Change**
-   next to **Your subdomain**. Choose or confirm the account subdomain. The
-   resulting production URL is
-   `https://chorotate-production.<account-subdomain>.workers.dev` because the
-   production Worker name is `chorotate-production`.
-
-   There is no supported `workers.dev` subdomain CLI setup step in this
-   runbook; use the dashboard control. Cloudflare can later attach a custom
-   domain, but the OAuth origin and callback must then be changed to that exact
-   custom origin before redeploying.
-
-3. Create the remote production D1 database. The `--update-config=false` flag
-   prevents Wrangler from writing a production resource ID into the tracked
-   config; the deployment wrapper receives the ID through an environment
-   variable instead.
-
-   ```sh
-   npx wrangler d1 create chorotate-production --update-config=false
-   ```
-
-   Record the UUID printed by Wrangler as `PRODUCTION_D1_DATABASE_ID`. Do not
-   use the local placeholder UUID from `wrangler.jsonc`.
-
-Cloudflare references: [workers.dev configuration](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/),
-[Wrangler authentication and `whoami`](https://developers.cloudflare.com/workers/wrangler/commands/general/),
-and [D1 Wrangler commands](https://developers.cloudflare.com/d1/wrangler-commands/).
-
-## Production values and secrets
-
-Production commands load `PRODUCTION_*` values from the ignored
-`.chorotate/production.env` file when it exists. It must be a mode-`0600`
-regular file; shell variables override it for one-off changes. Do **not** put
-these values in `wrangler.jsonc`, `.dev.vars`, or the private household JSON.
-
-Set the following before any deployment or remote D1 command. Replace every
-placeholder, and keep SMS disabled until consent and provider readiness are
-complete:
+Create a private environment file if you do not already have one:
 
 ```sh
-mkdir -p .chorotate
 touch .chorotate/production.env
 chmod 600 .chorotate/production.env
 ```
 
-Put these `KEY=value` lines in that file:
+Add these lines, replacing the UUID, origin, time zone, and example emails.
+The allowed-email list must match your household's Google emails and include
+the lowercase owner email.
 
 ```text
-PRODUCTION_D1_DATABASE_ID=uuid-from-wrangler-d1-create
+PRODUCTION_D1_DATABASE_ID=uuid-from-step-2
 PRODUCTION_CANONICAL_ORIGIN=https://chorotate-production.<account-subdomain>.workers.dev
 PRODUCTION_HOUSEHOLD_TIME_ZONE=America/New_York
 PRODUCTION_HOUSEHOLD_WEEK_START=monday
 PRODUCTION_OWNER_EMAIL=owner@example.com
 PRODUCTION_ALLOWED_EMAILS=owner@example.com,roommate@example.com
 PRODUCTION_REMINDER_SMS_ENABLED=false
+PRODUCTION_REMINDER_EVENING_LOCAL_TIME=20:00
+PRODUCTION_REMINDER_MORNING_LOCAL_TIME=08:00
 PRODUCTION_REMINDER_BATCH_SIZE=25
 PRODUCTION_REMINDER_LEASE_MILLISECONDS=300000
 PRODUCTION_REMINDER_MAX_ATTEMPTS=5
@@ -250,26 +130,65 @@ PRODUCTION_REMINDER_RETRY_BASE_MILLISECONDS=60000
 PRODUCTION_REMINDER_RETRY_MAX_MILLISECONDS=900000
 ```
 
-`PRODUCTION_OWNER_EMAIL` must be lowercase and must appear in
-`PRODUCTION_ALLOWED_EMAILS`. `PRODUCTION_CANONICAL_ORIGIN` must be the exact
-HTTPS origin registered in Google Cloud Console. The deployment wrapper
-validates all ranges and creates a temporary production Wrangler config. That
-temporary production config sets `CANONICAL_ORIGIN` to
-`PRODUCTION_CANONICAL_ORIGIN` and forces `LOCAL_AUTH_ENABLED=false`; neither
-value is persisted in the repository.
+Keep the reminder tuning defaults. Times are household-local, in 24-hour format.
+The evening field is required but unused; only morning reminders are planned.
 
-The following are **Cloudflare Worker secrets**, not `PRODUCTION_*` inputs:
+Deployment, remote D1, and verification commands load this file automatically;
+no `source` is needed. Exported variables override it. Keep `PRODUCTION_*` values
+here, not in `wrangler.jsonc` or `.dev.vars`.
 
-- `BETTER_AUTH_SECRET`: generate a 32-byte random secret in your password manager.
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: the web client created above.
-- `TEXTBELT_API_KEY`: runtime configuration currently requires this binding even
-  with SMS disabled. If you do not want SMS, enter a separate random value from
-  your password manager and keep `PRODUCTION_REMINDER_SMS_ENABLED=false`; you
-  do not need a Textbelt account. Replace it with a real provider key before
-  enabling reminders. Do not reuse your Better Auth secret.
+### 5. Initialize the remote household
 
-After the first Worker deployment exists, enter each value interactively so it
-does not appear in shell history:
+Validate the production build without uploading, then apply the database
+migrations:
+
+```sh
+npm run deploy:production:dry-run
+npm run operator:d1:migrations:apply
+```
+
+Generate and apply the household SQL. **Match the four settings below to
+`production.env`.** Unlike the deployment commands, preparation takes explicit
+flags and does not load that file.
+
+```sh
+npm run operator:bootstrap:prepare -- \
+  --input .chorotate/operator-bootstrap.json \
+  --output .chorotate/operator-bootstrap.sql \
+  --time-zone America/New_York \
+  --week-start monday \
+  --evening-time 20:00 \
+  --morning-time 08:00
+npm run operator:d1:execute -- --file .chorotate/operator-bootstrap.sql
+npm run operator:d1:verify -- --input .chorotate/operator-bootstrap.json
+```
+
+Expect **Remote D1 verification passed**. The verifier uses the JSON's member
+count and the environment file's reminder times; it does not send SMS.
+
+Bootstrap refuses a populated household. To regenerate SQL before execution,
+choose a new output filename and use it in both commands. Do not bootstrap again
+after execution succeeds.
+
+### 6. Deploy and add secrets
+
+```sh
+PRODUCTION_DEPLOY_CONFIRM=chorotate-production npm run deploy:production
+```
+
+Expect **chorotate-production Worker deployment completed**. The app stays
+unavailable until you add these four secrets:
+
+| Secret | Value |
+| --- | --- |
+| `BETTER_AUTH_SECRET` | A new random secret with at least 32 characters; generating 32 random bytes is suitable. |
+| `GOOGLE_CLIENT_ID` | The web client ID from step 3. |
+| `GOOGLE_CLIENT_SECRET` | The web client secret from step 3. |
+| `TEXTBELT_API_KEY` | With SMS off, a separate random value of at least 16 characters. Do not use the words `test-only`, `placeholder`, `change-me`, or `example`. No Textbelt account is needed yet. |
+
+The SMS key binding is currently required even when SMS is off. Never reuse
+your auth secret for it. Set each value at its interactive prompt, not as a
+command-line argument:
 
 ```sh
 npx wrangler secret put BETTER_AUTH_SECRET --env production
@@ -278,114 +197,91 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET --env production
 npx wrangler secret put TEXTBELT_API_KEY --env production
 ```
 
-These commands target the `production` Wrangler environment, whose Worker name
-is `chorotate-production`. Verify the selected account before entering a
-secret. Secrets are retained across deployments; never pass a secret as a
-command-line argument.
+Each secret command deploys immediately; no extra deployment is needed.
+Secrets are retained on later app deployments.
 
-## First production deployment
+### 7. Sign in and share
 
-Run these steps in order. The commands marked **script** are automated wrappers;
-the choices and environment setup around them remain manual.
+Open your production URL and sign in with a configured Google account. If
+**Now** is empty, click **Prepare schedule** to generate assignments.
 
-If `CHOROTATE_CF_API_TOKEN` is present, the repository's deployment and
-operator wrappers map it to Wrangler authentication automatically. Run the
-wrapper commands directly; do not use a failed `npx wrangler whoami` check to
-conclude that deployment credentials are unavailable, because direct Wrangler
-commands only recognize `CLOUDFLARE_API_TOKEN`.
+Check the views, next-month navigation, a reassignment and its history, and
+sign-out/sign-in. Confirm an unlisted account is denied, then share the URL.
 
-1. **Script:** build and validate the deployment without uploading it:
+Keep SMS off until you separately complete [Enable SMS later](#enable-sms-later-optional).
 
-   ```sh
-   npm run deploy:production:dry-run
-   ```
+## Household configuration
 
-2. **Script:** apply the ordered D1 migrations to the newly created empty
-   database:
+Use `.chorotate/operator-bootstrap.json` for local or production bootstrap.
+JSON does not allow comments or trailing commas.
 
-   ```sh
-   npm run operator:d1:migrations:list
-   npm run operator:d1:migrations:apply
-   ```
+| Field | What to enter |
+| --- | --- |
+| `householdId` | Keep `chorotate`; this is an internal identifier. |
+| `householdName` | Your household's name. |
+| `recordedAt` | A UTC timestamp such as `2026-09-10T12:00:00.000Z`; update it when preparing a change. |
+| `members` | 1-50 people. Each needs a unique lowercase ID such as `alex`, a unique display name, and a unique lowercase email. Do not add or remove the required fields. |
+| `phoneE164`, `consent`, `suppression` | For no SMS, keep `null`, `not_recorded`, and `not_suppressed`. See the SMS section before changing these. |
+| `chores` | 1-50 chores with unique IDs, unique names, and nonempty instructions. Include this list rather than relying on legacy defaults. |
+| `ownershipStartWeekday` | A lowercase weekday such as `friday`. That person owns the chore for seven days starting then; this is independent of the household week-start setting. |
+| `rotation.id` | A unique lowercase ID such as `rotation-recycling`; it does not have to contain a date. |
+| `rotation.effectiveFrom` | A `YYYY-MM-DD` date on the chore's starting weekday, on or before the first period you want scheduled. Future start dates can leave the current period empty. |
+| `rotation.memberIds` | Every member ID exactly once, in rotation order. Update every chore's list when changing the roster before bootstrap. |
+| `rotation.offset` | Use `0` to assign the anchor period to the first listed member. Rotation advances weekly from `effectiveFrom`, so an old anchor does not restart with the first member today. |
 
-3. **Script:** deploy the Worker. The explicit confirmation is required:
+IDs use lowercase letters, numbers, and hyphens. Names and instructions must
+not have leading/trailing whitespace. Keep private JSON files at mode `0600`
+under `.chorotate/`, or outside the repository with the same permissions.
 
-   ```sh
-   PRODUCTION_DEPLOY_CONFIRM=chorotate-production npm run deploy:production
-   ```
+**Editing JSON alone does not update a running household.** [Contact updates](#update-member-contacts)
+can change existing names, emails, and SMS settings. Adding/removing members or
+changing chores/rotations requires a separate database change; there is no wizard.
 
-4. **Manual:** add the four Worker secrets above with `wrangler secret put`.
-   Each command immediately deploys a new Worker version. The initial Worker
-   fails closed until all required secrets exist; keep SMS disabled throughout.
-5. **Script:** bootstrap the empty production household as described below.
-6. **Script:** run the redacted verification as described below.
-7. **Manual:** test Google sign-in with an address present in both the Google
-   test-user list (while testing) and the now-populated household allowlist.
-   Click **Prepare schedule** to create assignments, then check the calendar,
-   a reassignment, and sign-out. Confirm an unlisted account is denied.
-   Do not enable SMS merely because deployment succeeded.
+## Custom local household
 
-## Bootstrap a production household
+Follow the [README](../../README.md#run-locally). For a different household after
+bootstrap or demo seeding, use a fresh clone rather than deleting an existing
+database. For later visits, run only `npm run dev`.
 
-### Prepare private input
+Restart the dev server after editing `.dev.vars`. Use exactly
+`http://localhost:5173`; if occupied, stop the conflicting server rather than
+changing the port. Never expose local sign-in through a tunnel or reverse proxy.
 
-Copy the safe example; never edit or commit the tracked example itself:
+## Fast local development: no OAuth
 
-```sh
-mkdir -p .chorotate
-cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
-chmod 600 .chorotate/operator-bootstrap.json
-```
-
-Edit the copied JSON manually:
-
-- Keep `householdId` exactly `chorotate`; set `householdName` to the household
-  name and update `recordedAt` to the current UTC timestamp with milliseconds.
-- Replace every member's `id`, `displayName`, and normalized lowercase `email`.
-  IDs must be lowercase kebab-case. The roster must contain 1–50 members and
-  every email/display name must be unique.
-- Set `phoneE164` to `null` unless that person has provided the number. Set
-  `consent` to `consented` only with recorded consent; otherwise use
-  `not_recorded` or `revoked`. Use `suppression: "suppressed"` to prevent an
-  otherwise eligible contact from sending.
-- For custom chores, edit every object in `chores`: safe `id`, display `name`,
-  instructions, `ownershipStartWeekday`, and `rotation`. A rotation's
-  `effectiveFrom` must be a date on that weekday. Its `memberIds` array must
-  list every roster member exactly once in the desired order; the order is
-meaningful. Start with rotation `offset: 0` to use the first listed roommate
-   for the anchor period; higher offsets shift the starting position. Choose an
-   `effectiveFrom` date on or before the first period you want scheduled.
-
-The `chores` property is optional for backwards compatibility. Omitting it
-selects the script's existing Trash/Dishwasher default. Include it, as in
-`seed/operator-bootstrap.example.json`, for a custom chore set so the bootstrap
-and later verification use the same configuration.
-
-### Generate and execute bootstrap SQL
-
-The following **script** reads and validates the private input, writes a new
-mode-`0600` SQL file, and prints only readiness counts:
+For a no-edit preview, run this in a fresh checkout after `mise install` and
+`npm ci`. **Do not combine it with custom bootstrap.**
 
 ```sh
-npm run operator:bootstrap:prepare -- \
-  --input .chorotate/operator-bootstrap.json \
-  --output .chorotate/operator-bootstrap.sql \
-  --time-zone "$PRODUCTION_HOUSEHOLD_TIME_ZONE" \
-  --week-start "$PRODUCTION_HOUSEHOLD_WEEK_START" \
-  --evening-time 20:00 \
-  --morning-time 08:00
+cp .dev.vars.example .dev.vars
+npx wrangler d1 migrations apply chorotate-local --local
+npm run seed:local
+npm run dev
 ```
 
-The bootstrap is **first-run-only**. Its SQL assertion refuses to proceed if
-the target already contains household, member, identity, chore, or rotation
-rows. Confirm the database and input before executing:
+Keep the default time zone (`UTC`). Open `http://localhost:5173`, choose
+**Sign in locally**, then **Prepare schedule** if needed.
+
+## Update an existing deployment
+
+Keep your private JSON, environment file, and Worker secrets. Review incoming
+changes, then from a clean checkout:
 
 ```sh
-npm run operator:d1:execute -- --file .chorotate/operator-bootstrap.sql
+git pull --ff-only
+npm ci
+npm run deploy:production:dry-run
+npm run operator:d1:migrations:apply
+PRODUCTION_DEPLOY_CONFIRM=chorotate-production npm run deploy:production
 ```
 
-Do not reuse bootstrap SQL for an existing household. For an existing roster,
-prepare a contact update instead:
+Do not rerun bootstrap or re-enter unchanged secrets. Check sign-in and the
+schedule afterward.
+
+### Update member contacts
+
+Edit the existing private JSON and refresh `recordedAt`, then prepare a **new**
+SQL output file:
 
 ```sh
 npm run operator:contacts:prepare -- \
@@ -394,99 +290,70 @@ npm run operator:contacts:prepare -- \
 npm run operator:d1:execute -- --file .chorotate/operator-contact-update.sql
 ```
 
-That update is also exact-roster-only and clears stale auth bindings when an
-email changes. Keep private JSON and SQL files out of commits, logs, support
-bundles, and chat transcripts.
-
-## Verify production D1
-
-Set the verifier's additional expected values manually. The member count must
-match the private JSON; the reminder times must match the bootstrap arguments:
-
-```sh
-export PRODUCTION_HOUSEHOLD_MEMBER_COUNT='3'
-export PRODUCTION_REMINDER_EVENING_LOCAL_TIME='20:00'
-export PRODUCTION_REMINDER_MORNING_LOCAL_TIME='08:00'
-```
-
-Run the no-network command first, then the remote check with the **same private
-input used for bootstrap**:
-
-```sh
-npm run operator:d1:verify:dry-run -- --input .chorotate/operator-bootstrap.json
-npm run operator:d1:verify -- --input .chorotate/operator-bootstrap.json
-```
-
-With `--input`, the verifier checks the configured chore names, instructions,
-weekdays, rotations, member order, migrations, identity shape, contact-state
-integrity, and reminder-outbox uniqueness. It does not call Textbelt. The
-verification query is assembled from the private input and passed to Wrangler
-as `--command`; it can contain configured chore/rotation values and member
-IDs/order. It is not a value-free query, so protect shell history, process
-inspection, and CI logs. The wrapper withholds provider output and the script
-prints only fixed success/failure messages. Without `--input`, it expects the
-legacy default chore configuration; use the input for a custom household.
-
-SMS is optional. When `PRODUCTION_REMINDER_SMS_ENABLED=false`, the verifier
-expects the missing, unconsented, and suppressed contact counts from the
-private input and still rejects malformed contact states. Thus `null` phones,
-nonconsent, and suppression are valid when SMS is off, while identity,
-normalization, and contact-state integrity are still checked. When SMS is
-enabled, sendability is required by the verifier: all active members must have
-valid E.164 numbers, consent, and no suppression.
+Use a new output filename for later updates. This requires the exact existing
+roster. Changed emails revoke the old member sessions/auth binding. Keep the
+Google test-user list and `PRODUCTION_ALLOWED_EMAILS`/`PRODUCTION_OWNER_EMAIL`
+consistent with email changes, then redeploy if deployment settings changed.
 
 ## Enable SMS later (optional)
 
-Only enable SMS after every recipient has explicitly consented, has a valid
-E.164 number, and the Textbelt account/key and sender policy are ready. Update
-contacts using the private contact-update command first. Obtain a paid API key
-at <https://textbelt.com/> and enter it with
-`npx wrangler secret put TEXTBELT_API_KEY --env production`. Set the production
-shell value, verify readiness, then redeploy:
+Only enable SMS after recipients have consented and your
+[Textbelt](https://textbelt.com/) account has a working paid API key and credit.
+For each recipient, set `phoneE164` to their number with country code,
+`consent` to `consented`, and `suppression` to `not_suppressed` in the private
+JSON. Apply the [contact update](#update-member-contacts) first.
+
+Replace the random SMS key with the real provider key:
 
 ```sh
-export PRODUCTION_REMINDER_SMS_ENABLED='true'
+npx wrangler secret put TEXTBELT_API_KEY --env production
+```
+
+Change `PRODUCTION_REMINDER_SMS_ENABLED` to `true` **in
+`.chorotate/production.env`**, then run:
+
+```sh
 npm run operator:d1:verify -- --input .chorotate/operator-bootstrap.json
 PRODUCTION_DEPLOY_CONFIRM=chorotate-production npm run deploy:production
 ```
 
-The application still suppresses missing, unconsented, revoked, or manually
-suppressed contacts. Provider acceptance is not handset delivery. Keep SMS off
-for households that do not want it.
+Verification requires every active member to have a valid phone and consent,
+without suppression. Stop if it fails. Keep the SMS flag in the file so it
+persists across deployments.
 
-The deployment config installs the `*/15 * * * *` cron automatically. Confirm
-it in **Workers & Pages > chorotate-production > Settings > Trigger Events**.
-Only morning reminders are currently planned, on each chore's starting weekday
-at the household-local morning time. The evening field is retained but does
-not schedule evening messages. Messages must fit one GSM-7 segment. Ambiguous
-provider timeouts are terminal, not automatically retried; exactly-once handset
-delivery, next-day catch-up, and automatic correction messages are not promised.
-Record opt-outs promptly using `suppression: "suppressed"` and, when applicable,
-`consent: "revoked"` in the private contact-update workflow.
+Confirm the `*/15 * * * *` cron under **Workers & Pages > chorotate-production >
+Settings > Trigger Events**. Morning reminders use each chore's starting weekday
+and the database's local reminder time, subject to the 15-minute polling interval.
+Editing the verification time in `production.env` does not change the database.
 
-## Rollback and recovery
+Messages must fit one GSM-7 segment. Provider acceptance does not prove handset
+delivery; ambiguous timeouts are not retried. There is no next-day catch-up or
+automatic correction message. Apply opt-outs promptly through contact updates
+using `suppressed` and, when appropriate, `revoked`.
 
-- A failed `deploy:production` stops before or during upload and withholds
-  provider output. Correct the reported input and rerun the dry run; the
-  wrapper cleans temporary configs.
-- Do not roll back D1 by deleting rows or rerunning bootstrap. Migrations are
-  ordered and bootstrap is one-time. Restore the Worker version through the
-  Cloudflare deployment/version controls, then investigate database changes
-  separately.
-- If a private SQL command fails, keep the SQL file private and inspect the
-  redacted script error. The bootstrap assertion is designed to fail before
-  changing a non-empty household.
-- If Google login returns `redirect_uri_mismatch`, compare the exact HTTPS
-  origin and `/api/auth/callback/google` callback in Google Cloud Console with
-  `PRODUCTION_CANONICAL_ORIGIN`; do not add a wildcard.
-- If an allowlisted member cannot sign in, compare the normalized email in the
-  Google account, the private input, and `PRODUCTION_ALLOWED_EMAILS`. An OAuth
-  login alone never bypasses the D1 household allowlist.
+## Troubleshooting and recovery
+
+| Symptom | Check |
+| --- | --- |
+| Wrong Node/npm version or `npm` not found | Complete Mise shell activation, reopen the shell, and run `mise install` in this repository. `node --version` should match `mise.toml`. |
+| Local sign-in missing or denied | Use `npm run dev`, exactly `http://localhost:5173`, and the example `.dev.vars`. Confirm local bootstrap succeeded. |
+| Bootstrap refuses existing rows | This is a first-run guard. Do not delete household data or rerun bootstrap on an existing deployment. |
+| SQL generation reports an existing file | Pick a new private output filename; generation will not overwrite earlier SQL. |
+| `redirect_uri_mismatch` | Match the exact production origin plus `/api/auth/callback/google` in Google Console. No trailing slash or wildcard. |
+| A configured member cannot sign in | Check their exact lowercase Google email in the private JSON/D1 allowlist, Google audience/test users, and production email settings. |
+| No current assignment after preparation | Check each rotation's start date/weekday and that the app time zone matches the database setup. |
+| Production command fails | Fix the reported input or account authorization and retry the dry run. Provider output is deliberately withheld to avoid leaking private values. |
+
+Verification queries can contain household configuration in process arguments;
+protect terminal/process access. For rollback, restore a prior Worker version
+in Cloudflare. Do not delete D1 rows or rerun bootstrap; handle database recovery
+separately.
 
 ## References
 
-- [Google OAuth consent, scopes, clients, and test users](https://developers.google.com/workspace/marketplace/configure-oauth-consent-screen)
 - [Google OAuth web-server flow and redirect URI rules](https://developers.google.com/identity/protocols/oauth2/web-server)
+- [Google Auth Platform help](https://support.google.com/cloud/answer/15544987)
 - [Cloudflare workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
-- [Cloudflare Wrangler general commands](https://developers.cloudflare.com/workers/wrangler/commands/general/)
-- [Cloudflare D1 Wrangler commands](https://developers.cloudflare.com/d1/wrangler-commands/)
+- [Wrangler commands](https://developers.cloudflare.com/workers/wrangler/commands/)
+- [D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/)
+- [ChoRotate security contract](security.md)
