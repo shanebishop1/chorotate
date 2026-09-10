@@ -51,7 +51,11 @@ The database is the source of truth for household membership, schedules, assignm
 
 ## Run locally
 
-Install [Mise](https://mise.jdx.dev/), then clone and prepare the project:
+No Google, Cloudflare, or SMS account is needed locally. To share the app online, skip to [Deploy your household](docs/operations/operator-runbook.md#deploy-your-household).
+
+### 1. Install and prepare
+
+Install Git and [Mise](https://mise.jdx.dev/getting-started.html), including shell activation. Use Bash/Zsh on macOS, Linux, or Windows WSL:
 
 ```sh
 git clone https://github.com/shanebishop1/chorotate.git
@@ -59,15 +63,27 @@ cd chorotate
 mise install
 npm ci
 cp .dev.vars.example .dev.vars
-```
-
-Create your local household and start the app:
-
-```sh
 mkdir -p .chorotate
 cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
 chmod 600 .chorotate/operator-bootstrap.json
-# Edit .chorotate/operator-bootstrap.json with your roommates and chores.
+```
+
+### 2. Configure your household
+
+Edit `.chorotate/operator-bootstrap.json` with your roommates and chores using the [field guide](docs/operations/operator-runbook.md#household-configuration). Include every member ID once in each rotation, and choose a start date on the chore's starting weekday. Keep the phone and consent defaults.
+
+Add these lines to `.dev.vars`, choosing your household's [IANA time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
+
+```text
+HOUSEHOLD_TIME_ZONE=America/New_York
+HOUSEHOLD_WEEK_START=monday
+```
+
+### 3. Bootstrap and sign in
+
+Use the **same time zone and week start** in the command below. Bootstrap applies the local migrations automatically and is first-run-only; do not also run the demo seed.
+
+```sh
 npm run operator:bootstrap:local -- \
   --input .chorotate/operator-bootstrap.json \
   --time-zone America/New_York \
@@ -77,17 +93,15 @@ npm run operator:bootstrap:local -- \
 npm run dev
 ```
 
-Open <http://localhost:5173> and click **Sign in locally**. No Google credentials or Cloudflare account are needed. The first roommate in your configuration is used for local sign-in; SMS is disabled.
+Open **<http://localhost:5173>** and click **Sign in locally**, then **Prepare schedule** if the Now view is empty. You should see current and upcoming assignments. Local sign-in uses the first roommate in your JSON; SMS is disabled.
 
-Local sign-in works only in the development build on loopback, with `LOCAL_AUTH_ENABLED=true`. Production builds cannot enable it, even if the flag is set. Do not expose the development server through a tunnel or reverse proxy.
+On later visits, run only `npm run dev`. See [existing local data](docs/operations/operator-runbook.md#custom-local-household) before changing households, or the [optional demo seed](docs/operations/operator-runbook.md#fast-local-development-no-oauth) for a no-edit preview in a fresh checkout.
 
-### Household configuration
+Local sign-in is development-only and requires loopback with `LOCAL_AUTH_ENABLED=true`. Never expose the dev server through a tunnel or reverse proxy.
 
-Edit `.chorotate/operator-bootstrap.json` to set roommate names, emails, chores, instructions, weekdays, and rotation order. The same JSON format configures a fresh production household. Bootstrap is first-run-only, not a way to overwrite an existing schedule. See the [custom household setup](docs/operations/operator-runbook.md#custom-local-household) for the field rules.
+### Development checks
 
-To run the app with neutral demo data instead, use `npm run seed:local` after applying migrations. This is optional and should not be used with the custom bootstrap in the same local database.
-
-Run the standard project checks with:
+These checks are for code changes, not required setup steps:
 
 ```sh
 npm run check
@@ -102,7 +116,7 @@ npm run test:browser
 
 ## Operations
 
-The [operator runbook](docs/operations/operator-runbook.md) walks through Google Cloud Console, Cloudflare setup, where each setting and secret goes, household configuration, deployment, optional SMS, and rollback. The [security contract](docs/operations/security.md) describes authentication and local-development safeguards.
+See the [operator runbook](docs/operations/operator-runbook.md) for deployment, household configuration, SMS, and recovery, and the [security contract](docs/operations/security.md) for authentication safeguards.
 
 ## License
 
