@@ -1,12 +1,91 @@
 # ChoRotate operator runbook
 
 One person configures the household in JSON and deploys it. Roommates only need
-the URL and Google sign-in. For local use, follow the [README](../../README.md#run-locally)
-or the [optional demo seed](#fast-local-development-no-oauth).
+the URL and Google sign-in. You can [run locally](#run-locally) without external
+accounts or [deploy your household](#deploy-your-household) for shared use.
 
 Commands use macOS/Linux or Windows WSL with Bash/Zsh, from the repository root.
 Keep `.dev.vars`, `.chorotate/production.env`, household JSON, and generated SQL
 private. Do not commit them or paste their contents into logs or support tickets.
+
+## Run locally
+
+No Google, Cloudflare, or SMS account is needed locally.
+
+### 1. Install and prepare
+
+Install Git and [Mise](https://mise.jdx.dev/getting-started.html), including shell
+activation. Use Bash/Zsh on macOS, Linux, or Windows WSL:
+
+```sh
+git clone https://github.com/shanebishop1/chorotate.git
+cd chorotate
+mise install
+npm ci
+cp .dev.vars.example .dev.vars
+mkdir -p .chorotate
+cp seed/operator-bootstrap.example.json .chorotate/operator-bootstrap.json
+chmod 600 .chorotate/operator-bootstrap.json
+```
+
+### 2. Configure your household
+
+Edit `.chorotate/operator-bootstrap.json` with your roommates and chores using
+the [household field guide](#household-configuration). Include every member ID
+once in each rotation, choose a start date on the chore's starting weekday, and
+keep the phone and consent defaults.
+
+Add these lines to `.dev.vars`, choosing your household's
+[IANA time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
+
+```text
+HOUSEHOLD_TIME_ZONE=America/New_York
+HOUSEHOLD_WEEK_START=monday
+```
+
+### 3. Bootstrap and sign in
+
+Use the same time zone and week start below. Bootstrap applies local migrations
+automatically and is first-run-only; do not also run the demo seed.
+
+```sh
+npm run operator:bootstrap:local -- \
+  --input .chorotate/operator-bootstrap.json \
+  --time-zone America/New_York \
+  --week-start monday \
+  --evening-time 20:00 \
+  --morning-time 08:00
+npm run dev
+```
+
+Open <http://localhost:5173>, choose **Sign in locally**, then choose
+**Prepare schedule** if the Now view is empty. Local sign-in uses the first
+roommate in your JSON; SMS is disabled.
+
+On later visits, run only `npm run dev`. To configure a different household
+after bootstrap or demo seeding, use a fresh clone rather than deleting an
+existing database. Restart the dev server after editing `.dev.vars`.
+
+Local sign-in is development-only and requires exactly
+`http://localhost:5173` with `LOCAL_AUTH_ENABLED=true`. If the port is occupied,
+stop the conflicting server. Never expose the dev server through a tunnel or
+reverse proxy. For a no-edit preview, use the [optional demo seed](#fast-local-development-no-oauth)
+instead of custom bootstrap.
+
+### Development checks
+
+These are for code changes, not required setup steps:
+
+```sh
+npm run check
+```
+
+Browser tests require Chromium:
+
+```sh
+npm run test:browser:install
+npm run test:browser
+```
 
 ## Deploy your household
 
@@ -236,16 +315,6 @@ under `.chorotate/`, or outside the repository with the same permissions.
 **Editing JSON alone does not update a running household.** [Contact updates](#update-member-contacts)
 can change existing names, emails, and SMS settings. Adding/removing members or
 changing chores/rotations requires a separate database change; there is no wizard.
-
-## Custom local household
-
-Follow the [README](../../README.md#run-locally). For a different household after
-bootstrap or demo seeding, use a fresh clone rather than deleting an existing
-database. For later visits, run only `npm run dev`.
-
-Restart the dev server after editing `.dev.vars`. Use exactly
-`http://localhost:5173`; if occupied, stop the conflicting server rather than
-changing the port. Never expose local sign-in through a tunnel or reverse proxy.
 
 ## Fast local development: no OAuth
 
