@@ -870,6 +870,12 @@ test("theme control switches the rendered shell independently of system mode", a
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", target);
+  if (target === "light") {
+    await expect(page.locator(".app-shell")).toHaveCSS(
+      "background-color",
+      "rgb(243, 241, 235)",
+    );
+  }
 });
 
 test("light mode uses the flat neutral canvas", async ({ page }) => {
