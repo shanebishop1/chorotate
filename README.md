@@ -4,6 +4,12 @@
 
 ChoRotate lets you and your roommates track chores on a shared calendar and get SMS reminders when it's your turn. The web app, Google authentication, and scheduled text-message jobs are designed to deploy easily to Cloudflare, and the modular open-source code is easy for you or your coding agents to customize for your household.
 
+## Quickstart (prompt your agent)
+```text
+Help me set up ChoRotate `https://github.com/shanebishop1/chorotate`.
+Never directly read any personal information/emails/credentials.
+```
+
 <table>
   <tr>
     <td align="center" valign="top">
