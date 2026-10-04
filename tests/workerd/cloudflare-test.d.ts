@@ -10,6 +10,8 @@ declare global {
       TEST_MIGRATIONS: D1Migration[];
       TEST_OPERATOR_BOOTSTRAP_SQL: string;
       TEST_OPERATOR_CONTACT_SQL: string;
+      TEST_FOUR_MEMBER_BOOTSTRAP_SQL: string;
+      TEST_ADD_CHORES_SQL: string;
     }
   }
 }

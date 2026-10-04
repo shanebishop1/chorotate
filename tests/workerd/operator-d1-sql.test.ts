@@ -1,5 +1,11 @@
 import { applyD1Migrations, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import { prepareCurrentSchedule } from "../../app/domain/rotation/prepare";
+import { getCurrentAndNext } from "../../app/domain/read-models";
+import { createScheduledReminderDispatcher } from "../../app/domain/reminders/scheduled";
+import { createCloudflareRuntimeContext } from "../../app/runtime/context";
+import { validTestEnvironment } from "../../app/runtime/test-fixtures";
+import type { TextbeltSmsInput } from "../../app/domain/reminders/textbelt";
 
 function d1(): D1Database {
   if (env.DB === undefined)
@@ -53,6 +59,112 @@ async function executeAtomicFile(sql: string): Promise<D1Result<unknown>[]> {
 beforeEach(reset);
 
 describe("generated operator SQL on workerd D1", () => {
+  it("adds two chores and uses the existing schedule, read models, audit, and SMS pipeline for all four", async () => {
+    await executeAtomicFile(env.TEST_FOUR_MEMBER_BOOTSTRAP_SQL);
+    const actor = {
+      id: "member-a",
+      householdId: "chorotate",
+      displayName: "Member A",
+    };
+    const now = new Date("2026-09-07T13:01:00.000Z");
+    await prepareCurrentSchedule(d1(), actor, { now });
+    const before = await d1()
+      .prepare("SELECT * FROM weekly_assignments ORDER BY id")
+      .all();
+    await executeAtomicFile(env.TEST_ADD_CHORES_SQL);
+    await prepareCurrentSchedule(d1(), actor, { now });
+    await prepareCurrentSchedule(d1(), actor, { now });
+    expect(
+      (
+        await d1()
+          .prepare(
+            "SELECT * FROM weekly_assignments WHERE chore_id IN ('trash','dishwasher') ORDER BY id",
+          )
+          .all()
+      ).results,
+    ).toEqual(before.results);
+    await expect(
+      d1().prepare("SELECT count(*) AS n FROM weekly_assignments").first(),
+    ).resolves.toEqual({ n: 212 });
+    await expect(
+      d1().prepare("SELECT count(*) AS n FROM assignment_audit_events").first(),
+    ).resolves.toEqual({ n: 212 });
+    const context = {
+      database: d1(),
+      authorizer: {
+        async requireAuthorizedMember() {
+          return actor;
+        },
+      },
+    };
+    for (const instant of [
+      "2026-09-07T13:01:00Z",
+      "2026-09-14T13:01:00Z",
+      "2026-09-21T13:01:00Z",
+      "2026-09-28T13:01:00Z",
+    ]) {
+      const projection = await getCurrentAndNext(context, {
+        request: new Request("https://example.com"),
+        now: new Date(instant),
+      });
+      expect(projection.state).toBe("ready");
+      expect(projection.handoffs.map(({ chore }) => chore.name)).toEqual([
+        "Dishwasher",
+        "Sweep",
+        "Trash",
+        "Wipe",
+      ]);
+      expect(
+        new Set(projection.handoffs.map(({ current }) => current?.member.id))
+          .size,
+      ).toBe(4);
+      for (const handoff of projection.handoffs) {
+        expect(handoff.current).not.toBeNull();
+        expect(handoff.next?.member.id).not.toBe(handoff.current?.member.id);
+        expect(handoff.chore.instructions).not.toBe("");
+      }
+    }
+    const sent: TextbeltSmsInput[] = [];
+    let clock = now;
+    const scheduled = createScheduledReminderDispatcher({
+      now: () => clock,
+      createTransport: () => ({
+        async send(input) {
+          sent.push(input);
+          return {
+            success: true as const,
+            textId: sent.length,
+            quotaRemaining: 100,
+          };
+        },
+      }),
+    });
+    const runtime = createCloudflareRuntimeContext(
+      validTestEnvironment({ DB: d1() }),
+      {} as ExecutionContext,
+    );
+    for (const instant of ["2026-09-07T13:01:00Z", "2026-09-11T13:01:00Z"]) {
+      clock = new Date(instant);
+      const controller = {
+        scheduledTime: clock.valueOf(),
+      } as ScheduledController;
+      await scheduled(controller, runtime);
+      await scheduled(controller, runtime);
+    }
+    expect(sent).toHaveLength(4);
+    expect(sent.map(({ message }) => message).sort()).toEqual([
+      "You're on Dishwasher this week- Sep 7 to Sep 13",
+      "You're on Sweep this week- Sep 11 to Sep 17",
+      "You're on Trash this week- Sep 11 to Sep 17",
+      "You're on Wipe this week- Sep 11 to Sep 17",
+    ]);
+    await expect(executeAtomicFile(env.TEST_ADD_CHORES_SQL)).rejects.toThrow();
+    await expect(assertionTables()).resolves.toEqual([]);
+    await expect(
+      d1().prepare("SELECT count(*) AS n FROM chores").first(),
+    ).resolves.toEqual({ n: 4 });
+  });
+
   it("uses transaction-scoped ordinary assertions and remains first-run safe", async () => {
     expect(env.TEST_OPERATOR_BOOTSTRAP_SQL).toContain(
       "CREATE TABLE operator_bootstrap_assert",
