@@ -86,7 +86,9 @@ export function buildProductionD1WranglerArgs(operation, paths) {
   if (operation === "migrations-apply")
     return ["d1", "migrations", "apply", ...common];
   if (operation === "execute" && paths.sqlPath) {
-    return ["d1", "execute", ...common, "--file", paths.sqlPath];
+    // The explicit operator command is the approval boundary. File imports also
+    // prompt in non-interactive shells, where inherited stdin cannot answer.
+    return ["d1", "execute", ...common, "--file", paths.sqlPath, "--yes"];
   }
   if (operation === "verify" && paths.verificationQuery) {
     return [
