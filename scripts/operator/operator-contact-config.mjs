@@ -454,6 +454,31 @@ export async function readOperatorInput(path) {
   }
 }
 
+/** Write new private SQL without overwriting earlier operator changes.
+ * @param {string} path
+ * @param {string} sql
+ */
+export async function writeOperatorSql(path, sql) {
+  const parent = await realpath(dirname(resolve(path)));
+  const outputPath = join(parent, basename(path));
+  if (!allowedPrivatePath(outputPath)) {
+    throw new Error(
+      "Operator output path must be outside the repository or under .chorotate",
+    );
+  }
+  const output = await open(
+    outputPath,
+    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+    0o600,
+  );
+  try {
+    await output.chmod(0o600);
+    await output.writeFile(sql, "utf8");
+  } finally {
+    await output.close();
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const bootstrap = args.includes("--bootstrap");
@@ -507,17 +532,7 @@ async function main() {
         morningTime: args[morningTimeIndex + 1],
       })
     : buildContactSql(input);
-  const output = await open(
-    outputPath,
-    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-    0o600,
-  );
-  try {
-    await output.chmod(0o600);
-    await output.writeFile(sql, "utf8");
-  } finally {
-    await output.close();
-  }
+  await writeOperatorSql(outputPath, sql);
   const summary = summarizeContactReadiness(input);
   console.log(
     `Prepared private D1 ${bootstrap ? "bootstrap" : "contact update"} without printing values: total=${summary.total}, sendable=${summary.sendable}, missing=${summary.missing}, unconsented=${summary.unconsented}, suppressed=${summary.suppressed}.`,
