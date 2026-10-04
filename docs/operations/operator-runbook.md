@@ -313,8 +313,9 @@ not have leading/trailing whitespace. Keep private JSON files at mode `0600`
 under `.chorotate/`, or outside the repository with the same permissions.
 
 **Editing JSON alone does not update a running household.** [Contact updates](#update-member-contacts)
-can change existing names, emails, and SMS settings. Adding/removing members or
-changing chores/rotations requires a separate database change; there is no wizard.
+can change existing names, emails, and SMS settings. Use [Add chores](#add-chores)
+for new chores. Removing chores, changing existing rotations, or changing the
+roster still requires a separate database change; there is no wizard.
 
 ## Fast local development: no OAuth
 
@@ -363,6 +364,48 @@ Use a new output filename for later updates. This requires the exact existing
 roster. Changed emails revoke the old member sessions/auth binding. Keep the
 Google test-user list and `PRODUCTION_ALLOWED_EMAILS`/`PRODUCTION_OWNER_EMAIL`
 consistent with email changes, then redeploy if deployment settings changed.
+
+### Add chores
+
+Chores are runtime data: the existing UI, assignment actions, weekly rotation,
+audit history, and SMS pipeline automatically support additional chores. No app
+code change, schema migration, or Worker redeployment is needed for this operation.
+
+1. Copy your private household JSON to `.chorotate/new-chores.json` (mode `0600`).
+   Keep the exact active roster, refresh `recordedAt`, and set `chores` to **only
+   the new chores**, using the [field guide](#household-configuration). Names and
+   chore/rotation IDs must not collide with existing rows. This operation does
+   not apply contact or membership changes from the input.
+2. Choose anchor dates on each chore's starting weekday, on or before its current
+   period. To spread duties, use the same member order and stagger offsets; account
+   for the number of weeks since each anchor, not just the offset itself. For four
+   members, Friday chores at offsets `0`, `1`, `3` and a following-Monday chore at
+   offset `2` share a staggered cycle. Existing manual swaps can cause overlaps;
+   adding chores never rewrites those assignments.
+3. Prepare and apply the private SQL as **one file**:
+
+   ```sh
+   npm run operator:chores:add:prepare -- \
+     --input .chorotate/new-chores.json \
+     --output .chorotate/new-chores.sql
+   npm run operator:d1:execute -- --file .chorotate/new-chores.sql
+   ```
+
+   SQL guards check the household, exact active roster, name collisions, and chore
+   limit. Existing IDs also fail safely. Applying the same addition twice fails;
+   do not split the SQL into individually executed statements.
+4. Append the new chores to your canonical private household JSON, retaining all
+   existing chore and rotation definitions. Run verification with that full input:
+
+   ```sh
+   npm run operator:d1:verify -- --input .chorotate/operator-bootstrap.json
+   ```
+
+5. Sign in and choose **Prepare schedule** to generate the same 53-period horizon
+   used by existing chores. Check all four views and reminder status. Reminders
+   use the household's existing morning time and each chore's starting weekday;
+   there are no chore-specific reminder settings to enable. SMS remains subject
+   to the existing global flag, consent, and suppression settings.
 
 ## Enable SMS later (optional)
 
