@@ -379,9 +379,10 @@ code change, schema migration, or Worker redeployment is needed for this operati
 2. Choose anchor dates on each chore's starting weekday, on or before its current
    period. To spread duties, use the same member order and stagger offsets; account
    for the number of weeks since each anchor, not just the offset itself. For four
-   members, Friday chores at offsets `0`, `1`, `3` and a following-Monday chore at
-   offset `2` share a staggered cycle. Existing manual swaps can cause overlaps;
-   adding chores never rewrites those assignments.
+    members and four chores, use a shared turnover weekday and four distinct
+    rotation positions to keep one chore per person. Different turnover weekdays
+    can create overlaps even with staggered offsets. Existing manual swaps can
+    also cause overlaps; adding chores never rewrites those assignments.
 3. Prepare and apply the private SQL as **one file**:
 
    ```sh
@@ -406,6 +407,47 @@ code change, schema migration, or Worker redeployment is needed for this operati
    use the household's existing morning time and each chore's starting weekday;
    there are no chore-specific reminder settings to enable. SMS remains subject
    to the existing global flag, consent, and suppression settings.
+
+### Change turnover weekdays safely
+
+Apply migration `0009_schedule_transitions.sql` before deploying code that uses
+effective-dated weekdays. A chore's default weekday is **not** sufficient to
+change an existing schedule: every rotation configuration snapshots its own
+weekday so historical Friday duties keep their original boundaries.
+
+There is no general-purpose schedule-change CLI. Prepare a reviewed private SQL
+file against a fresh database snapshot and test it on a copy before applying it
+with `operator:d1:execute`. The cutover must:
+
+- Leave completed and current assignments and their audit events unchanged.
+- Add future-effective rotation configurations, retaining the old configurations
+  and their member orders. A weekday change resets the period index at the new
+  boundary; a same-weekday configuration keeps the existing index. Compute
+  offsets accordingly rather than copying old offsets blindly.
+- Cover any gap with a short bridge period. The next configuration truncates the
+  preceding period's end date; views, edit eligibility, and SMS labels respect it.
+- Retain obsolete future assignments in `assignment_schedule_retirements` rather
+  than deleting immutable assignment/audit rows. Retired plans cannot be edited,
+  displayed as active duties, or sent as reminders. Cancel their pending outbox
+  entries with `schedule_changed`, without altering accepted receipts.
+- Correct still-valid future assignments through versioned, audited changes and
+  cancel superseded pending reminders. Configuration inserts do not overwrite
+  already-materialized assignments.
+- For equally sized rosters and chores, choose distinct first-week positions in
+  one shared member order. `planBalancedRotation` scores all starting phases
+  using historical responsibility days, prioritizing historically underassigned
+  people earlier in the cycle and minimizing consecutive repeats on ties. It
+  cannot prove completion or erase pre-existing lifetime count differences.
+- Set `households.balanced_rotation_from` to the synchronized start date to block
+  reassignments or swaps that would give a recipient two chores in that week.
+  Same-week swaps remain supported and are checked atomically at mutation time.
+
+Validate the bridge, every future materialized week, the four-week cycle,
+historical views, and canceled/new reminders. Keep a private backup of the
+canonical household JSON, then update its chores to the new weekday and latest
+rotation definitions. Production verification accepts structurally valid earlier
+configurations while verifying the latest definitions against that JSON. Do not
+rerun bootstrap to replace an existing household.
 
 ## Enable SMS later (optional)
 
