@@ -9,6 +9,31 @@ import {
 } from "./period";
 
 describe("chore-specific local periods", () => {
+  it("retains old Fridays and truncates the bridge exactly at the new Monday boundary", () => {
+    const settings = {
+      timeZone: "America/New_York",
+      startsOn: 5 as const,
+      changes: [{ effectiveFrom: "2026-10-12", startsOn: 1 as const }],
+    };
+    expect(
+      localPeriodFromStart("2026-10-02", settings).localInclusiveEndDate,
+    ).toBe("2026-10-08");
+    expect(
+      chorePeriodAt(new Date("2026-10-12T03:59:59.999Z"), settings),
+    ).toMatchObject({
+      localStartDate: "2026-10-09",
+      localInclusiveEndDate: "2026-10-11",
+      endsAt: new Date("2026-10-12T04:00:00.000Z"),
+    });
+    expect(
+      chorePeriodAt(new Date("2026-10-12T04:00:00.000Z"), settings),
+    ).toMatchObject({
+      localStartDate: "2026-10-12",
+      localInclusiveEndDate: "2026-10-18",
+    });
+    expect(() => localPeriodFromStart("2026-10-16", settings)).toThrow();
+  });
+
   it("uses independent Friday and Monday boundaries at the same instant", () => {
     const now = new Date("2026-09-01T16:00:00.000Z");
 

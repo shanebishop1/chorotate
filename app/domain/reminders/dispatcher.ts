@@ -1,4 +1,5 @@
 import type { D1DatabaseLike } from "../storage/d1";
+import { activeAssignmentSql, periodEndSql } from "../rotation/schedule-sql";
 import { localDateAt } from "./local-time";
 import type { OccurrencePhase } from "./planner";
 import {
@@ -16,6 +17,7 @@ interface ClaimedRow {
   assignment_id: string;
   assignment_version: number;
   local_period_start: string;
+  local_period_end: string;
   chore_name: string;
   recipient_member_id: string;
   occurrence_phase: OccurrencePhase;
@@ -81,7 +83,10 @@ function batchChanges(result: unknown, index: number): number | null {
   return Array.isArray(result) ? mutationChanges(result[index]) : null;
 }
 
-function periodLabel(localPeriodStart: string): string {
+function periodLabel(
+  localPeriodStart: string,
+  localPeriodEnd?: string,
+): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localPeriodStart);
   if (!match) throw new RangeError("Invalid reminder period");
   const start = new Date(
@@ -90,7 +95,18 @@ function periodLabel(localPeriodStart: string): string {
   if (start.toISOString().slice(0, 10) !== localPeriodStart) {
     throw new RangeError("Invalid reminder period");
   }
-  const end = new Date(start.getTime() + 6 * 86_400_000);
+  const regularEnd = new Date(start.getTime() + 6 * 86_400_000);
+  const end = localPeriodEnd
+    ? new Date(`${localPeriodEnd}T00:00:00Z`)
+    : regularEnd;
+  if (
+    !Number.isFinite(end.getTime()) ||
+    end < start ||
+    end > regularEnd ||
+    (localPeriodEnd && end.toISOString().slice(0, 10) !== localPeriodEnd)
+  ) {
+    throw new RangeError("Invalid reminder period");
+  }
   const format = (date: Date) =>
     new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -104,8 +120,9 @@ export function buildReminderSms(input: {
   phase: OccurrencePhase;
   choreName: string;
   localPeriodStart: string;
+  localPeriodEnd?: string;
 }): string {
-  const message = `You're on ${input.choreName} this week- ${periodLabel(input.localPeriodStart)}`;
+  const message = `You're on ${input.choreName} this week- ${periodLabel(input.localPeriodStart, input.localPeriodEnd)}`;
   assertSingleSegmentGsm7(message);
   return message;
 }
@@ -169,10 +186,11 @@ async function claimedRows(
   const result = await database
     .prepare(
       `SELECT outbox.id,outbox.assignment_id,outbox.assignment_version,
-              outbox.local_period_start,chore.name AS chore_name,
+               outbox.local_period_start,${periodEndSql("assignment")} AS local_period_end,chore.name AS chore_name,
               outbox.recipient_member_id,outbox.occurrence_phase,
               outbox.attempt_count,outbox.lease_expires_at
-       FROM reminder_outbox AS outbox
+        FROM reminder_outbox AS outbox
+        JOIN weekly_assignments AS assignment ON assignment.id=outbox.assignment_id
        JOIN chores AS chore
          ON chore.household_id=outbox.household_id AND chore.id=outbox.chore_id
        WHERE outbox.status='leased' AND outbox.lease_owner=?
@@ -219,7 +237,7 @@ async function currentContact(
        JOIN members AS member
          ON member.household_id=outbox.household_id
         AND member.id=outbox.recipient_member_id
-       WHERE outbox.id=?`,
+        WHERE outbox.id=? AND ${activeAssignmentSql("assignment")}`,
     )
     .bind(row.id)
     .all<ContactRow>();
@@ -447,6 +465,7 @@ export function createReminderDispatcher(
               phase: row.occurrence_phase,
               choreName: row.chore_name,
               localPeriodStart: row.local_period_start,
+              localPeriodEnd: row.local_period_end,
             });
           } catch {
             state = await completeFenced(

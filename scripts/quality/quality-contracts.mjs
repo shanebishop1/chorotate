@@ -82,7 +82,7 @@ const migrations = readdirSync("migrations")
 const migrationNumbers = migrations.map((name) => Number(name.slice(0, 4)));
 check(
   "current ordered migration set",
-  migrations.at(-1) === "0008_sms_occurrence_times.sql" &&
+  migrations.at(-1) === "0009_schedule_transitions.sql" &&
     migrationNumbers.every((number, index) => number === index + 1),
   migrations.join(", "),
 );

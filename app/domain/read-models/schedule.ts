@@ -10,7 +10,8 @@ import {
   MAX_CALENDAR_DAYS,
   MAX_PAGE_SIZE,
   pageInput,
-  periodRange,
+  weekdayValue,
+  stringValue,
   ReadModelError,
   unavailable,
   type Page,
@@ -29,7 +30,18 @@ import {
   type ChoreRow,
   type MemberRow,
 } from "./projections";
-import { addLocalDays, chorePeriodAt } from "../rotation/period";
+import {
+  addLocalDays,
+  chorePeriodAt,
+  localPeriodFromStart,
+  type Weekday,
+} from "../rotation/period";
+import type { LocalDate } from "../contracts";
+import {
+  activeAssignmentSql,
+  periodEndSql,
+  periodWeekdaySql,
+} from "../rotation/schedule-sql";
 
 export async function getActiveMembers(
   context: ReadModelContext,
@@ -65,7 +77,8 @@ export async function getActiveMembers(
 const assignmentSelect = `
   SELECT wa.id AS assignment_id, wa.local_period_start, wa.chore_id,
          c.name AS chore_name, c.instructions AS chore_instructions,
-         c.ownership_start_weekday,
+          ${periodWeekdaySql("wa")} AS ownership_start_weekday,
+          ${periodEndSql("wa")} AS local_period_end,
          wa.member_id, m.display_name AS member_name,
          m.active AS member_active,
          (SELECT u.image
@@ -118,6 +131,7 @@ async function assignmentPage(
     };
   }
   const clauses = [
+    activeAssignmentSql("wa"),
     "wa.household_id = ?",
     "wa.local_period_start >= ?",
     "wa.local_period_start <= ?",
@@ -193,18 +207,47 @@ export async function getCurrentAndNext(
       return { state: "empty", handoffs: [] };
     }
     const now = input.now ?? new Date();
+    const scheduleResult = await context.database
+      .prepare(
+        `SELECT rc.chore_id,rc.effective_from,COALESCE(rc.ownership_start_weekday,c.ownership_start_weekday) AS starts_on
+       FROM rotation_configs rc JOIN chores c ON c.id=rc.chore_id AND c.household_id=rc.household_id
+       WHERE rc.household_id=? ORDER BY rc.chore_id,rc.effective_from`,
+      )
+      .bind(household.id)
+      .all<{ chore_id: string; effective_from: string; starts_on: unknown }>();
     const chores = choreResult.results.map((row) => {
       const chore = choreFromRow(row);
       const startsOn = chore.ownershipStartWeekday;
-      const current = chorePeriodAt(now, {
+      const settings = {
         timeZone: household.timeZone,
         startsOn,
-      });
-      return { chore, currentStart: current.localStartDate };
+        changes: scheduleResult.results
+          .filter((c) => c.chore_id === chore.id)
+          .map((c) => ({
+            effectiveFrom: stringValue(c.effective_from) as LocalDate,
+            startsOn: weekdayValue(c.starts_on),
+          })),
+      };
+      const current = chorePeriodAt(now, settings);
+      const next = localPeriodFromStart(
+        addLocalDays(current.localInclusiveEndDate, 1),
+        settings,
+      );
+      return {
+        chore: {
+          ...chore,
+          ownershipStartWeekday: new Date(
+            `${current.localStartDate}T00:00:00Z`,
+          ).getUTCDay() as Weekday,
+        },
+        current,
+        next,
+        currentStart: current.localStartDate,
+      };
     });
-    const starts = chores.flatMap(({ currentStart }) => [
+    const starts = chores.flatMap(({ currentStart, next }) => [
       currentStart,
-      addLocalDays(currentStart, 7),
+      next.localStartDate,
     ]);
     const assignmentResult = await assignmentPage(context, {
       householdId: household.id,
@@ -222,12 +265,20 @@ export async function getCurrentAndNext(
         assignment,
       ]),
     );
-    const handoffs = chores.map(({ chore, currentStart }) => {
-      const nextStart = addLocalDays(currentStart, 7);
+    const handoffs = chores.map(({ chore, currentStart, current, next }) => {
+      const nextStart = next.localStartDate;
       return {
         chore,
-        currentPeriod: periodRange(household.id, currentStart),
-        nextPeriod: periodRange(household.id, nextStart),
+        currentPeriod: {
+          householdId: household.id,
+          localStartDate: currentStart,
+          localEndDateInclusive: current.localInclusiveEndDate,
+        },
+        nextPeriod: {
+          householdId: household.id,
+          localStartDate: nextStart,
+          localEndDateInclusive: next.localInclusiveEndDate,
+        },
         current: assignments.get(`${chore.id}\u0000${currentStart}`) ?? null,
         next: assignments.get(`${chore.id}\u0000${nextStart}`) ?? null,
       };

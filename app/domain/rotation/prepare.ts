@@ -67,7 +67,7 @@ export async function prepareCurrentSchedule(
     database
       .prepare(
         `SELECT rc.id AS config_id, rc.effective_from, rc.chore_id,
-                rc.rotation_offset, c.ownership_start_weekday
+                 rc.rotation_offset, COALESCE(rc.ownership_start_weekday, c.ownership_start_weekday) AS ownership_start_weekday
          FROM rotation_configs rc INNER JOIN chores c
            ON c.household_id = rc.household_id AND c.id = rc.chore_id
          WHERE rc.household_id = ? AND c.active = 1
@@ -108,15 +108,13 @@ export async function prepareCurrentSchedule(
       effectiveFrom,
       memberIds,
       rotationOffset: integer(row.rotation_offset),
+      ownershipStartWeekday: weekday(row.ownership_start_weekday),
     };
     const startsOn = weekday(row.ownership_start_weekday);
     const existing = rotationsByChore.get(choreId);
-    if (existing && existing.ownershipStartWeekday !== startsOn) {
-      throw new Error("Schedule unavailable");
-    }
     rotationsByChore.set(choreId, {
       choreId,
-      ownershipStartWeekday: startsOn,
+      ownershipStartWeekday: existing?.ownershipStartWeekday ?? startsOn,
       anchorPeriodStart:
         existing && existing.anchorPeriodStart < effectiveFrom
           ? existing.anchorPeriodStart

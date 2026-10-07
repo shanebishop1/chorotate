@@ -50,6 +50,10 @@ export async function materializeRollingHorizon(
     const currentPeriod = chorePeriodAt(input.now, {
       timeZone: input.timeZone,
       startsOn: rotation.ownershipStartWeekday,
+      changes: rotation.configurations.map((c) => ({
+        effectiveFrom: c.effectiveFrom,
+        startsOn: c.ownershipStartWeekday ?? rotation.ownershipStartWeekday,
+      })),
     });
     return previewRotation({
       rotation,

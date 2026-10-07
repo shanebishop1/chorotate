@@ -5,6 +5,7 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 export interface ChorePeriodSettings {
   timeZone: string;
   startsOn: Weekday;
+  changes?: readonly { effectiveFrom: LocalDate; startsOn: Weekday }[];
 }
 
 export interface ChorePeriod {
@@ -187,16 +188,23 @@ export function localPeriodFromStart(
   localStartDate: LocalDate,
   settings: ChorePeriodSettings,
 ): ChorePeriod {
-  validateStartsOn(settings.startsOn);
-  if (weekdayOfLocalDate(localStartDate) !== settings.startsOn) {
+  const startsOn = scheduledWeekday(localStartDate, settings);
+  validateStartsOn(startsOn);
+  if (weekdayOfLocalDate(localStartDate) !== startsOn) {
     throw new RangeError(
-      `${localStartDate} is not a chore period boundary for weekday ${settings.startsOn}`,
+      `${localStartDate} is not a chore period boundary for weekday ${startsOn}`,
     );
   }
-  const nextStart = addLocalDays(localStartDate, 7);
+  const regularNext = addLocalDays(localStartDate, 7);
+  const nextChange = settings.changes
+    ?.filter(({ effectiveFrom }) => effectiveFrom > localStartDate)
+    .map(({ effectiveFrom }) => effectiveFrom)
+    .sort()[0];
+  const nextStart =
+    nextChange && nextChange < regularNext ? nextChange : regularNext;
   return {
     localStartDate,
-    localInclusiveEndDate: addLocalDays(localStartDate, 6),
+    localInclusiveEndDate: addLocalDays(nextStart, -1),
     startsAt: localMidnight(localStartDate, settings.timeZone),
     endsAt: localMidnight(nextStart, settings.timeZone),
   };
@@ -210,10 +218,22 @@ export function chorePeriodAt(
   validateStartsOn(settings.startsOn);
   const localParts = partsAt(instant, settings.timeZone);
   const localDate = formatLocalDate(localParts);
-  const daysSinceStart =
-    (weekdayOfLocalDate(localDate) - settings.startsOn + 7) % 7;
+  const startsOn = scheduledWeekday(localDate, settings);
+  const daysSinceStart = (weekdayOfLocalDate(localDate) - startsOn + 7) % 7;
   return localPeriodFromStart(
     addLocalDays(localDate, -daysSinceStart),
     settings,
+  );
+}
+
+function scheduledWeekday(
+  localDate: LocalDate,
+  settings: ChorePeriodSettings,
+): Weekday {
+  return (
+    settings.changes
+      ?.filter(({ effectiveFrom }) => effectiveFrom <= localDate)
+      .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+      ?.startsOn ?? settings.startsOn
   );
 }
