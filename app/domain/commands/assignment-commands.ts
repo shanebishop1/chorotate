@@ -1,5 +1,9 @@
 import type { AuthorizedMember } from "../../auth/access";
-import { localPeriodFromStart } from "../rotation/period";
+import {
+  addLocalDays,
+  localPeriodFromStart,
+  weekdayOfLocalDate,
+} from "../rotation/period";
 import {
   actorIsActive,
   createPrimarySession,
@@ -7,6 +11,7 @@ import {
   memberIsActive,
   membersAreActive,
   reassignAssignment,
+  recipientCanOwnAssignment,
   swapAssignments,
   type AssignmentState,
   type SessionCapableDatabase,
@@ -125,6 +130,17 @@ export function createAssignmentCommandService(
         ) {
           return { status: "rejected", reason: "recipient_ineligible" };
         }
+        if (
+          !(await recipientCanOwnAssignment(
+            session,
+            context.actor.householdId,
+            assignment.assignmentId,
+            command.recipientMemberId,
+            [assignment.assignmentId],
+          ))
+        ) {
+          return { status: "rejected", reason: "recipient_ineligible" };
+        }
 
         const changes = await reassignAssignment(session, {
           recipientMemberId: command.recipientMemberId,
@@ -212,6 +228,25 @@ export function createAssignmentCommandService(
           return { status: "rejected", reason: "recipient_ineligible" };
         }
 
+        const excludedIds = ordered.map((a) => a.assignmentId);
+        if (
+          !(await recipientCanOwnAssignment(
+            session,
+            context.actor.householdId,
+            ordered[0].assignmentId,
+            ordered[1].memberId,
+            excludedIds,
+          )) ||
+          !(await recipientCanOwnAssignment(
+            session,
+            context.actor.householdId,
+            ordered[1].assignmentId,
+            ordered[0].memberId,
+            excludedIds,
+          ))
+        ) {
+          return { status: "rejected", reason: "recipient_ineligible" };
+        }
         const changes = await swapAssignments(session, {
           actorMemberId: context.actor.id,
           householdId: context.actor.householdId,
@@ -397,6 +432,14 @@ function assignmentHasEnded(
   const period = localPeriodFromStart(assignment.localPeriodStart, {
     timeZone: context.timeZone,
     startsOn: assignment.ownershipStartWeekday,
+    changes: [
+      {
+        effectiveFrom: addLocalDays(assignment.localPeriodEnd, 1),
+        startsOn: weekdayOfLocalDate(
+          addLocalDays(assignment.localPeriodEnd, 1),
+        ),
+      },
+    ],
   });
   return period.endsAt.getTime() <= new Date(context.occurredAt).getTime();
 }

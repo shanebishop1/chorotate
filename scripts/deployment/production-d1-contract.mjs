@@ -7,6 +7,7 @@ const expectedMigrations = [
   "0006_assignment_integrity.sql",
   "0007_sms_contact_period_outbox.sql",
   "0008_sms_occurrence_times.sql",
+  "0009_schedule_transitions.sql",
 ].join("|");
 
 import {
@@ -191,12 +192,19 @@ export function buildProductionD1VerificationQuery(input) {
         `      (id = ${sqlString(chore.rotation.id)}
         AND chore_id = ${sqlString(chore.id)}
         AND effective_from = ${sqlString(chore.rotation.effectiveFrom)}
-        AND rotation_offset = ${chore.rotation.offset})`,
+         AND rotation_offset = ${chore.rotation.offset}
+         AND ownership_start_weekday = ${chore.ownershipStartWeekdayNumber})`,
     )
     .join(" OR\n");
   const rotationIds = settings.chores
     .map((chore) => sqlString(chore.rotation.id))
     .join(", ");
+  const recognizedHistory = settings.chores
+    .map(
+      (chore) =>
+        `(chore_id = ${sqlString(chore.id)} AND effective_from < ${sqlString(chore.rotation.effectiveFrom)})`,
+    )
+    .join(" OR ");
   const expectedRotationOrders = settings.explicitChoreConfig
     ? settings.chores
         .map(
@@ -286,13 +294,22 @@ SELECT
 ${expectedChores}
      )) AS expected_chores,
   (SELECT count(*) FROM rotation_configs
-    WHERE household_id = 'chorotate') AS rotation_configs,
+     WHERE household_id = 'chorotate' AND id IN (${rotationIds})) AS rotation_configs,
+  (SELECT count(*) FROM rotation_configs
+     WHERE household_id = 'chorotate' AND id NOT IN (${rotationIds})
+       AND NOT (${recognizedHistory})) AS unrecognized_rotation_configs,
+  (SELECT count(*) FROM rotation_configs rc
+     WHERE rc.household_id='chorotate' AND (
+       rc.ownership_start_weekday IS NULL OR
+       CAST(strftime('%w',rc.effective_from) AS INTEGER) <> rc.ownership_start_weekday OR
+       (SELECT count(*) FROM rotation_config_members rcm WHERE rcm.rotation_config_id=rc.id) <> ${settings.memberCount}
+     )) AS invalid_rotation_history,
   (SELECT count(*) FROM rotation_configs
      WHERE household_id = 'chorotate' AND (
 ${expectedRotations}
      )) AS expected_rotation_configs,
   (SELECT count(*) FROM rotation_config_members
-    WHERE household_id = 'chorotate') AS rotation_members,
+     WHERE household_id = 'chorotate' AND rotation_config_id IN (${rotationIds})) AS rotation_members,
   (SELECT count(*) FROM (
     SELECT rotation_config_members.rotation_config_id
     FROM rotation_config_members
@@ -382,6 +399,8 @@ export function expectedProductionD1Result(
     active_chores: choreCount,
     expected_chores: choreCount,
     rotation_configs: choreCount,
+    unrecognized_rotation_configs: 0,
+    invalid_rotation_history: 0,
     expected_rotation_configs: choreCount,
     rotation_members: memberCount * choreCount,
     expected_rotation_members: choreCount,

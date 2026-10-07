@@ -26,6 +26,7 @@ export interface MemberRow {
 export interface AssignmentRow {
   assignment_id: unknown;
   local_period_start: unknown;
+  local_period_end: unknown;
   chore_id: unknown;
   chore_name: unknown;
   chore_instructions: unknown;
@@ -149,6 +150,7 @@ export function assignmentFromRow(
       stringValue(row.local_period_start),
       timeZone,
       ownershipStartWeekday,
+      stringValue(row.local_period_end),
     ),
     chore: {
       id: stringValue(row.chore_id),
