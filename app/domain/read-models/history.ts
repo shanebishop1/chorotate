@@ -18,6 +18,7 @@ import {
   type ProjectionState,
   type ReadModelContext,
 } from "./shared";
+import { periodEndSql } from "../rotation/schedule-sql";
 import { reminderStatus } from "./projections";
 
 type OperationKind = "materialize" | "reassign" | "swap" | "correct";
@@ -30,6 +31,7 @@ interface HistoryRow {
   operation_kind: unknown;
   occurred_at: unknown;
   local_period_start: unknown;
+  local_period_end: unknown;
   chore_id: unknown;
   chore_name: unknown;
   ownership_start_weekday: unknown;
@@ -215,7 +217,8 @@ export async function getGroupedHistory(
          )
          SELECT e.id AS event_id, e.assignment_id, e.operation_id, e.request_id,
                  e.operation_kind, e.occurred_at, e.local_period_start, e.chore_id,
-                 c.name AS chore_name, c.ownership_start_weekday,
+                  c.name AS chore_name, CAST(strftime('%w',e.local_period_start) AS INTEGER) AS ownership_start_weekday,
+                  ${periodEndSql("e")} AS local_period_end,
                  e.actor_member_id, actor.display_name AS actor_name,
                  actor.active AS actor_active, e.before_member_id,
                  before_member.display_name AS before_name, before_member.active AS before_active,
@@ -334,6 +337,7 @@ export async function getGroupedHistory(
           stringValue(row.local_period_start),
           household.timeZone,
           weekdayValue(row.ownership_start_weekday),
+          stringValue(row.local_period_end),
         ),
         chore: {
           id: stringValue(row.chore_id),

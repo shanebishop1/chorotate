@@ -2,12 +2,18 @@ import type { AuthorizedMember } from "../../auth/access";
 import type { LocalDate } from "../contracts";
 import type { Weekday } from "../rotation/period";
 import type { D1DatabaseLike, D1StatementLike } from "../storage/d1";
+import {
+  activeAssignmentSql,
+  periodEndSql,
+  periodWeekdaySql,
+} from "../rotation/schedule-sql";
 
 interface AssignmentRow {
   assignment_id: unknown;
   household_id: unknown;
   household_time_zone: unknown;
   local_period_start: unknown;
+  local_period_end: unknown;
   ownership_start_weekday: unknown;
   member_id: unknown;
   version: unknown;
@@ -23,6 +29,7 @@ export interface AssignmentState {
   householdId: string;
   householdTimeZone: string;
   localPeriodStart: LocalDate;
+  localPeriodEnd: LocalDate;
   ownershipStartWeekday: Weekday;
   memberId: string;
   version: number;
@@ -80,7 +87,8 @@ const assignmentColumns = `
   assignment.household_id,
   household.time_zone AS household_time_zone,
   assignment.local_period_start,
-  chore.ownership_start_weekday,
+  ${periodWeekdaySql("assignment")} AS ownership_start_weekday,
+  ${periodEndSql("assignment")} AS local_period_end,
   assignment.member_id,
   assignment.version,
   assignment.source,
@@ -100,6 +108,7 @@ const reassignSql = `
       operation_kind = 'reassign',
       occurred_at = ?5
   WHERE id = ?6
+    AND ${activeAssignmentSql("weekly_assignments")}
     AND household_id = ?7
     AND version = ?8
     AND member_id <> ?1
@@ -108,7 +117,7 @@ const reassignSql = `
       SELECT 1 FROM chores AS chore
       WHERE chore.id = weekly_assignments.chore_id
         AND chore.household_id = ?7
-        AND chore.ownership_start_weekday = ?10
+        AND ${periodWeekdaySql("weekly_assignments")} = ?10
     )
     AND EXISTS (
       SELECT 1 FROM members AS actor
@@ -121,7 +130,8 @@ const reassignSql = `
     AND EXISTS (
       SELECT 1 FROM members AS recipient
       WHERE recipient.id = ?1 AND recipient.household_id = ?7 AND recipient.active = 1
-    )`;
+    )
+    AND ${balancedRecipientSql("weekly_assignments", "?1", ["?6"])} `;
 
 // A single UPDATE statement changes both rows. Its materialized eligibility CTE
 // captures both expected versions and active recipients before either row changes;
@@ -153,7 +163,9 @@ const swapSql = `
         WHERE assignment.id = ?5 AND assignment.household_id = ?2
           AND assignment.version = ?6 AND assignment.member_id = ?3
           AND assignment.local_period_start = ?7
-          AND chore.ownership_start_weekday = ?8
+          AND ${periodWeekdaySql("assignment")} = ?8
+          AND ${activeAssignmentSql("assignment")}
+          AND ${balancedRecipientSql("assignment", "?4", ["?5", "?9"])}
       )
       AND EXISTS (
         SELECT 1 FROM weekly_assignments AS assignment
@@ -163,7 +175,9 @@ const swapSql = `
         WHERE assignment.id = ?9 AND assignment.household_id = ?2
           AND assignment.version = ?10 AND assignment.member_id = ?4
           AND assignment.local_period_start = ?11
-          AND chore.ownership_start_weekday = ?12
+          AND ${periodWeekdaySql("assignment")} = ?12
+          AND ${activeAssignmentSql("assignment")}
+          AND ${balancedRecipientSql("assignment", "?3", ["?5", "?9"])}
       )
   )
   UPDATE weekly_assignments
@@ -223,6 +237,24 @@ export async function membersAreActive(
   return result.results.length === 2;
 }
 
+export async function recipientCanOwnAssignment(
+  database: D1DatabaseLike,
+  householdId: string,
+  assignmentId: string,
+  recipientId: string,
+  excludedIds: readonly string[],
+): Promise<boolean> {
+  if (excludedIds.length < 1 || excludedIds.length > 2) return false;
+  const exclusions = excludedIds.map((_, i) => `?${i + 4}`);
+  const result = await database
+    .prepare(`SELECT assignment.id FROM weekly_assignments assignment
+    WHERE assignment.id=?1 AND assignment.household_id=?2 AND ${activeAssignmentSql("assignment")}
+      AND ${balancedRecipientSql("assignment", "?3", exclusions)}`)
+    .bind(assignmentId, householdId, recipientId, ...excludedIds)
+    .all();
+  return result.results.length === 1;
+}
+
 export async function loadAssignments(
   database: D1DatabaseLike,
   assignmentIds: readonly string[],
@@ -240,7 +272,7 @@ export async function loadAssignments(
         AND chore.household_id = assignment.household_id
        INNER JOIN households AS household
          ON household.id = assignment.household_id
-       WHERE assignment.id IN (${placeholders})`,
+        WHERE assignment.id IN (${placeholders}) AND ${activeAssignmentSql("assignment")}`,
     )
     .bind(...assignmentIds)
     .all<AssignmentRow>();
@@ -324,6 +356,7 @@ function parseAssignment(row: AssignmentRow): AssignmentState {
     !isIdentifier(row.household_id) ||
     !validTimeZone(row.household_time_zone) ||
     !isLocalDate(row.local_period_start) ||
+    !isLocalDate(row.local_period_end) ||
     !isWeekday(row.ownership_start_weekday) ||
     !isIdentifier(row.member_id) ||
     !isPositiveVersion(row.version) ||
@@ -340,6 +373,7 @@ function parseAssignment(row: AssignmentRow): AssignmentState {
     householdId: row.household_id,
     householdTimeZone: row.household_time_zone,
     localPeriodStart: row.local_period_start,
+    localPeriodEnd: row.local_period_end,
     ownershipStartWeekday: row.ownership_start_weekday,
     memberId: row.member_id,
     version: row.version,
@@ -349,6 +383,21 @@ function parseAssignment(row: AssignmentRow): AssignmentState {
     operationId: row.operation_id,
     operationKind: row.operation_kind,
   };
+}
+
+function balancedRecipientSql(
+  alias: string,
+  recipient: string,
+  excluded: string[],
+): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM households balanced
+    JOIN weekly_assignments busy ON busy.household_id=balanced.id
+    WHERE balanced.id=${alias}.household_id AND balanced.balanced_rotation_from IS NOT NULL
+      AND ${alias}.local_period_start>=balanced.balanced_rotation_from
+      AND busy.local_period_start=${alias}.local_period_start AND busy.member_id=${recipient}
+      AND busy.id NOT IN (${excluded.join(",")}) AND ${activeAssignmentSql("busy")}
+  )`;
 }
 
 function isIdentifier(value: unknown): value is string {

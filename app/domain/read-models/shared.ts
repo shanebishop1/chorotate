@@ -161,6 +161,7 @@ export function chorePeriodRange(
   localStartDate: string,
   timeZone: string,
   startsOn: Weekday,
+  localEndDate?: string,
 ): PeriodRange {
   const period = localPeriodFromStart(localStartDate as LocalDate, {
     timeZone,
@@ -169,7 +170,7 @@ export function chorePeriodRange(
   return {
     householdId,
     localStartDate: period.localStartDate,
-    localEndDateInclusive: period.localInclusiveEndDate,
+    localEndDateInclusive: localEndDate ?? period.localInclusiveEndDate,
   };
 }
 

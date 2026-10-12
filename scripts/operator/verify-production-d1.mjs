@@ -45,7 +45,7 @@ if (
 
 if (dryRun && inputIndex === -1) {
   console.log(
-    "Remote D1 verification dry-run passed: command shape is fixed; checks cover migrations 0001-0008, exact household/member/identity/chore/rotation structure, contact-state integrity, SMS sendability only when enabled, and outbox duplicates; no remote request was made and no values were printed.",
+    "Remote D1 verification dry-run passed: command shape is fixed; checks cover migrations 0001-0009, exact household/member/identity/chore/rotation structure, retained rotation history, contact-state integrity, SMS sendability only when enabled, and outbox duplicates; no remote request was made and no values were printed.",
   );
   process.exit(0);
 }
@@ -137,7 +137,7 @@ async function main() {
   }
 
   console.log(
-    "Remote D1 verification passed: migrations 0001-0008, exact household/member/identity/contact/configured-chore/rotation structure, and outbox uniqueness; Cloudflare D1 was queried, no values were printed, and no Textbelt request was made.",
+    "Remote D1 verification passed: migrations 0001-0009, exact household/member/identity/contact/configured-chore/rotation structure, retained rotation history, and outbox uniqueness; Cloudflare D1 was queried, no values were printed, and no Textbelt request was made.",
   );
 }
 

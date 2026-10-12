@@ -87,6 +87,7 @@ test("builds only fixed binding-based production D1 commands", () => {
       configPath,
       "--file",
       sqlPath,
+      "--yes",
     ],
   );
   assert.deepEqual(

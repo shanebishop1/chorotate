@@ -40,6 +40,40 @@ const dishwasher: ChoreRotation = {
 };
 
 describe("deterministic chore-period offset rotation", () => {
+  it("finishes the old cadence with a short bridge and resets indexing on a new weekday", () => {
+    const rotation: ChoreRotation = {
+      ...trash,
+      configurations: [
+        ...trash.configurations,
+        {
+          id: "monday",
+          effectiveFrom: "2026-10-12",
+          ownershipStartWeekday: 1,
+          memberIds: members,
+          rotationOffset: 3,
+        },
+      ],
+    };
+    const preview = previewRotation({
+      rotation,
+      fromPeriod: "2026-10-02",
+      periodCount: 4,
+    });
+    expect(
+      preview.map((p) => [p.localPeriodStart, p.localInclusiveEndDate]),
+    ).toEqual([
+      ["2026-10-02", "2026-10-08"],
+      ["2026-10-09", "2026-10-11"],
+      ["2026-10-12", "2026-10-18"],
+      ["2026-10-19", "2026-10-25"],
+    ]);
+    expect(preview[2]).toMatchObject({
+      configurationId: "monday",
+      periodIndex: 0,
+      memberId: "Member D",
+    });
+    expect(preview[3]).toMatchObject({ periodIndex: 1, memberId: "Member A" });
+  });
   it("matches the initial four-period acceptance table on independent dates", () => {
     const trashPreview = previewRotation({
       rotation: trash,

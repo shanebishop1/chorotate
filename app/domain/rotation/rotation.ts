@@ -11,6 +11,7 @@ export interface RotationConfiguration {
   effectiveFrom: LocalDate;
   memberIds: readonly MemberId[];
   rotationOffset: number;
+  ownershipStartWeekday?: Weekday;
 }
 
 export interface ChoreRotation {
@@ -116,10 +117,20 @@ function validateChoreRotation(rotation: ChoreRotation): void {
     throw new RangeError("Chore rotation requires a configuration");
   }
   const effectiveDates = new Set<string>();
-  for (const configuration of rotation.configurations) {
+  let anchor = rotation.anchorPeriodStart;
+  let startsOn = rotation.ownershipStartWeekday;
+  for (const configuration of [...rotation.configurations].sort((a, b) =>
+    a.effectiveFrom.localeCompare(b.effectiveFrom),
+  )) {
+    const configuredWeekday =
+      configuration.ownershipStartWeekday ?? rotation.ownershipStartWeekday;
+    if (configuredWeekday !== startsOn) {
+      anchor = configuration.effectiveFrom;
+      startsOn = configuredWeekday;
+    }
     validateRotationConfiguration(configuration, {
-      anchorPeriod: rotation.anchorPeriodStart,
-      ownershipStartWeekday: rotation.ownershipStartWeekday,
+      anchorPeriod: anchor,
+      ownershipStartWeekday: startsOn,
     });
     if (effectiveDates.has(configuration.effectiveFrom)) {
       throw new RangeError(
@@ -143,28 +154,41 @@ export function previewRotation(input: {
     throw new RangeError("periodCount must be a non-negative integer");
   }
   validateChoreRotation(input.rotation);
-  const firstIndex = periodsBetween(
-    input.rotation.anchorPeriodStart,
-    input.fromPeriod,
+  const configurations = [...input.rotation.configurations].sort((a, b) =>
+    a.effectiveFrom.localeCompare(b.effectiveFrom),
   );
-  if (
-    weekdayOfLocalDate(input.fromPeriod) !==
-    input.rotation.ownershipStartWeekday
-  ) {
-    throw new RangeError("Preview must begin on a chore period boundary");
-  }
-
-  return Array.from({ length: input.periodCount }, (_, offset) => {
-    const localPeriodStart = addLocalDays(input.fromPeriod, offset * 7);
-    const periodIndex = firstIndex + offset;
+  let localPeriodStart = input.fromPeriod;
+  return Array.from({ length: input.periodCount }, () => {
     const configuration = selectEffectiveConfiguration(
       input.rotation.configurations,
       localPeriodStart,
     );
-    return {
+    let anchor = input.rotation.anchorPeriodStart;
+    let startsOn = input.rotation.ownershipStartWeekday;
+    for (const candidate of configurations.filter(
+      (c) => c.effectiveFrom <= localPeriodStart,
+    )) {
+      const weekday =
+        candidate.ownershipStartWeekday ?? input.rotation.ownershipStartWeekday;
+      if (weekday !== startsOn) {
+        anchor = candidate.effectiveFrom;
+        startsOn = weekday;
+      }
+    }
+    if (weekdayOfLocalDate(localPeriodStart) !== startsOn) {
+      throw new RangeError("Preview must begin on a chore period boundary");
+    }
+    const periodIndex = periodsBetween(anchor, localPeriodStart);
+    const regularNext = addLocalDays(localPeriodStart, 7);
+    const nextChange = configurations.find(
+      (c) => c.effectiveFrom > localPeriodStart,
+    )?.effectiveFrom;
+    const nextStart =
+      nextChange && nextChange < regularNext ? nextChange : regularNext;
+    const result = {
       choreId: input.rotation.choreId,
       localPeriodStart,
-      localInclusiveEndDate: addLocalDays(localPeriodStart, 6),
+      localInclusiveEndDate: addLocalDays(nextStart, -1),
       periodIndex,
       configurationId: configuration.id,
       memberId: assigneeFor(
@@ -173,5 +197,7 @@ export function previewRotation(input: {
         configuration.rotationOffset,
       ),
     };
+    localPeriodStart = nextStart;
+    return result;
   });
 }

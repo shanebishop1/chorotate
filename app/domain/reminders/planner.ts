@@ -1,4 +1,5 @@
 import type { D1DatabaseLike } from "../storage/d1";
+import { activeAssignmentSql, periodEndSql } from "../rotation/schedule-sql";
 import { localDateAt, zonedParts } from "./local-time";
 import {
   contactEligibilityFailure,
@@ -204,7 +205,8 @@ async function insertOccurrence(
        FROM weekly_assignments AS current_assignment
        WHERE current_assignment.id = ?
          AND current_assignment.version = ?
-         AND current_assignment.member_id = ?
+          AND current_assignment.member_id = ?
+          AND ${activeAssignmentSql("current_assignment")}
        ON CONFLICT (
          household_id,assignment_id,assignment_version,local_period_start,
          chore_id,occurrence_phase,recipient_member_id
@@ -314,6 +316,12 @@ export async function planReminders(
   }
   const now = input.now.toISOString();
   await database
+    .prepare(`UPDATE reminder_outbox SET status='failed',sanitized_error_category='schedule_changed',lease_owner=NULL,lease_expires_at=NULL,terminal_at=?
+      WHERE assignment_id IN (SELECT assignment_id FROM assignment_schedule_retirements)
+        AND (status='pending' OR (status='leased' AND lease_expires_at<=?))`)
+    .bind(now, now)
+    .run();
+  await database
     .prepare(
       `UPDATE reminder_outbox
        SET status = 'failed', sanitized_error_category = 'occurrence_disabled',
@@ -352,7 +360,8 @@ export async function planReminders(
          JOIN members AS member ON member.id = assignment.member_id
                               AND member.household_id = assignment.household_id
           WHERE assignment.household_id = ?
-            AND date(assignment.local_period_start, '+6 days') >= ?
+             AND ${periodEndSql("assignment")} >= ?
+             AND ${activeAssignmentSql("assignment")}
             AND assignment.local_period_start <= ?
           ORDER BY assignment.local_period_start,assignment.chore_id,assignment.id`,
       )

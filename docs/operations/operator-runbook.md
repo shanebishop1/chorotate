@@ -313,8 +313,9 @@ not have leading/trailing whitespace. Keep private JSON files at mode `0600`
 under `.chorotate/`, or outside the repository with the same permissions.
 
 **Editing JSON alone does not update a running household.** [Contact updates](#update-member-contacts)
-can change existing names, emails, and SMS settings. Adding/removing members or
-changing chores/rotations requires a separate database change; there is no wizard.
+can change existing names, emails, and SMS settings. Use [Add chores](#add-chores)
+for new chores. Removing chores, changing existing rotations, or changing the
+roster still requires a separate database change; there is no wizard.
 
 ## Fast local development: no OAuth
 
@@ -363,6 +364,90 @@ Use a new output filename for later updates. This requires the exact existing
 roster. Changed emails revoke the old member sessions/auth binding. Keep the
 Google test-user list and `PRODUCTION_ALLOWED_EMAILS`/`PRODUCTION_OWNER_EMAIL`
 consistent with email changes, then redeploy if deployment settings changed.
+
+### Add chores
+
+Chores are runtime data: the existing UI, assignment actions, weekly rotation,
+audit history, and SMS pipeline automatically support additional chores. No app
+code change, schema migration, or Worker redeployment is needed for this operation.
+
+1. Copy your private household JSON to `.chorotate/new-chores.json` (mode `0600`).
+   Keep the exact active roster, refresh `recordedAt`, and set `chores` to **only
+   the new chores**, using the [field guide](#household-configuration). Names and
+   chore/rotation IDs must not collide with existing rows. This operation does
+   not apply contact or membership changes from the input.
+2. Choose anchor dates on each chore's starting weekday, on or before its current
+   period. To spread duties, use the same member order and stagger offsets; account
+   for the number of weeks since each anchor, not just the offset itself. For four
+    members and four chores, use a shared turnover weekday and four distinct
+    rotation positions to keep one chore per person. Different turnover weekdays
+    can create overlaps even with staggered offsets. Existing manual swaps can
+    also cause overlaps; adding chores never rewrites those assignments.
+3. Prepare and apply the private SQL as **one file**:
+
+   ```sh
+   npm run operator:chores:add:prepare -- \
+     --input .chorotate/new-chores.json \
+     --output .chorotate/new-chores.sql
+   npm run operator:d1:execute -- --file .chorotate/new-chores.sql
+   ```
+
+   SQL guards check the household, exact active roster, name collisions, and chore
+   limit. Existing IDs also fail safely. Applying the same addition twice fails;
+   do not split the SQL into individually executed statements.
+4. Append the new chores to your canonical private household JSON, retaining all
+   existing chore and rotation definitions. Run verification with that full input:
+
+   ```sh
+   npm run operator:d1:verify -- --input .chorotate/operator-bootstrap.json
+   ```
+
+5. Sign in and choose **Prepare schedule** to generate the same 53-period horizon
+   used by existing chores. Check all four views and reminder status. Reminders
+   use the household's existing morning time and each chore's starting weekday;
+   there are no chore-specific reminder settings to enable. SMS remains subject
+   to the existing global flag, consent, and suppression settings.
+
+### Change turnover weekdays safely
+
+Apply migration `0009_schedule_transitions.sql` before deploying code that uses
+effective-dated weekdays. A chore's default weekday is **not** sufficient to
+change an existing schedule: every rotation configuration snapshots its own
+weekday so historical Friday duties keep their original boundaries.
+
+There is no general-purpose schedule-change CLI. Prepare a reviewed private SQL
+file against a fresh database snapshot and test it on a copy before applying it
+with `operator:d1:execute`. The cutover must:
+
+- Leave completed and current assignments and their audit events unchanged.
+- Add future-effective rotation configurations, retaining the old configurations
+  and their member orders. A weekday change resets the period index at the new
+  boundary; a same-weekday configuration keeps the existing index. Compute
+  offsets accordingly rather than copying old offsets blindly.
+- Cover any gap with a short bridge period. The next configuration truncates the
+  preceding period's end date; views, edit eligibility, and SMS labels respect it.
+- Retain obsolete future assignments in `assignment_schedule_retirements` rather
+  than deleting immutable assignment/audit rows. Retired plans cannot be edited,
+  displayed as active duties, or sent as reminders. Cancel their pending outbox
+  entries with `schedule_changed`, without altering accepted receipts.
+- Correct still-valid future assignments through versioned, audited changes and
+  cancel superseded pending reminders. Configuration inserts do not overwrite
+  already-materialized assignments.
+- For equally sized rosters and chores, choose distinct first-week positions in
+  one shared member order. `planBalancedRotation` scores all starting phases
+  using historical responsibility days, prioritizing historically underassigned
+  people earlier in the cycle and minimizing consecutive repeats on ties. It
+  cannot prove completion or erase pre-existing lifetime count differences.
+- Set `households.balanced_rotation_from` to the synchronized start date to block
+  reassignments or swaps that would give a recipient two chores in that week.
+  Same-week swaps remain supported and are checked atomically at mutation time.
+
+Validate the bridge, every future materialized week, the four-week cycle,
+historical views, and canceled/new reminders. Keep a private backup of the
+canonical household JSON, then update its chores to the new weekday and latest
+rotation definitions. Production verification accepts structurally valid earlier
+configurations while verifying the latest definitions against that JSON. Do not
+rerun bootstrap to replace an existing household.
 
 ## Enable SMS later (optional)
 
