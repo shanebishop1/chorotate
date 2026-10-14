@@ -10,6 +10,8 @@ import { createAssignmentCommandService } from "../../app/domain/commands/assign
 import { planReminders } from "../../app/domain/reminders/planner";
 import { createReminderDispatcher } from "../../app/domain/reminders/dispatcher";
 import type { TextbeltSmsInput } from "../../app/domain/reminders/textbelt";
+import { runHomeAction } from "../../app/routes/home-action";
+import { parseRuntimeConfig } from "../../app/runtime/environment";
 
 function db() {
   if (!env.DB) throw new Error("Missing D1");
@@ -30,6 +32,36 @@ const context = () => ({
   },
 });
 const request = new Request("https://example.com");
+function actionConfig() {
+  return parseRuntimeConfig({
+    DB: db(),
+    APP_ENV: "test",
+    CANONICAL_ORIGIN: "https://example.com",
+    HOUSEHOLD_TIME_ZONE: "America/New_York",
+    HOUSEHOLD_WEEK_START: "monday",
+    OWNER_EMAIL: "member-a@example.com",
+    ALLOWED_EMAILS: "member-a@example.com",
+    LOCAL_AUTH_ENABLED: "false",
+    REMINDER_SMS_ENABLED: "false",
+    REMINDER_BATCH_SIZE: "25",
+    REMINDER_LEASE_MILLISECONDS: "300000",
+    REMINDER_MAX_ATTEMPTS: "5",
+    REMINDER_PROVIDER_TIMEOUT_MILLISECONDS: "10000",
+    REMINDER_RETRY_BASE_MILLISECONDS: "60000",
+    REMINDER_RETRY_MAX_MILLISECONDS: "900000",
+    BETTER_AUTH_SECRET: "test-only-better-auth-secret-00000000",
+    GOOGLE_CLIENT_ID: "test-only-google-client-id",
+    GOOGLE_CLIENT_SECRET: "test-only-google-client-secret",
+    TEXTBELT_API_KEY: "test-only-textbelt-api-key",
+  });
+}
+function actionRequest(values: Record<string, string>) {
+  return new Request("https://example.com", {
+    method: "POST",
+    headers: { origin: "https://example.com" },
+    body: new URLSearchParams(values),
+  });
+}
 async function atomic(sql: string) {
   await db().batch(
     sql
@@ -185,7 +217,90 @@ describe("safe synchronized Monday cutover", () => {
     ).rejects.toThrow();
   });
 
-  it("blocks stacking and cross-week swaps but permits same-week swaps; shortened periods end on Monday", async () => {
+  it("allows trading this week's Trash for next week's Trash without changing other duties", async () => {
+    await transition();
+    const currentId = "assignment:chorotate:2026-10-12:trash";
+    const futureId = "assignment:chorotate:2026-10-19:trash";
+    const before = await db()
+      .prepare(
+        "SELECT id,member_id,version FROM weekly_assignments ORDER BY id",
+      )
+      .all<{ id: string; member_id: string; version: number }>();
+    const current = before.results.find((a) => a.id === currentId)!;
+    const future = before.results.find((a) => a.id === futureId)!;
+    expect(current.member_id).not.toBe(future.member_id);
+    const command = {
+      first: { assignmentId: currentId, expectedVersion: current.version },
+      second: { assignmentId: futureId, expectedVersion: future.version },
+      requestId: "request:trash-week-trade",
+      operationId: "operation:trash-week-trade",
+    };
+    const commandContext = {
+      actor,
+      timeZone: "America/New_York",
+      occurredAt: "2026-10-13T16:00:00.000Z",
+    };
+    const service = createAssignmentCommandService(db());
+    await expect(
+      runHomeAction(
+        actionRequest({
+          intent: "swap",
+          firstAssignmentId: currentId,
+          firstExpectedVersion: String(current.version),
+          secondAssignmentId: futureId,
+          secondExpectedVersion: String(future.version),
+          requestId: command.requestId,
+        }),
+        db(),
+        actionConfig(),
+        {
+          authorize: async () => actor,
+          now: () => new Date(commandContext.occurredAt),
+          prepare: prepareCurrentSchedule,
+        },
+      ),
+    ).resolves.toEqual({ state: "success", intent: "swap" });
+    // Preparing the automatic schedule must not undo an agreed trade.
+    await prepareCurrentSchedule(db(), actor, { now, horizonPeriods: 55 });
+    const after = await db()
+      .prepare(
+        "SELECT id,member_id,version FROM weekly_assignments ORDER BY id",
+      )
+      .all();
+    expect(after.results).toEqual(
+      before.results.map((a) =>
+        a.id === currentId
+          ? { ...a, member_id: future.member_id, version: a.version + 1 }
+          : a.id === futureId
+            ? { ...a, member_id: current.member_id, version: a.version + 1 }
+            : a,
+      ),
+    );
+    await expect(service.swap(command, commandContext)).resolves.toMatchObject({
+      status: "success",
+      replayed: true,
+    });
+    const audit = await db()
+      .prepare(
+        "SELECT assignment_id,before_member_id,after_member_id FROM assignment_audit_events WHERE operation_id=? ORDER BY assignment_id",
+      )
+      .bind(command.operationId)
+      .all();
+    expect(audit.results).toEqual([
+      {
+        assignment_id: currentId,
+        before_member_id: current.member_id,
+        after_member_id: future.member_id,
+      },
+      {
+        assignment_id: futureId,
+        before_member_id: future.member_id,
+        after_member_id: current.member_id,
+      },
+    ]);
+  });
+
+  it("blocks one-time stacking but permits same-week swaps; shortened periods end on Monday", async () => {
     await transition();
     const service = createAssignmentCommandService(db());
     const commandContext = {
@@ -206,21 +321,29 @@ describe("safe synchronized Monday cutover", () => {
         },
         commandContext,
       ),
-    ).resolves.toEqual({ status: "rejected", reason: "recipient_ineligible" });
+    ).resolves.toEqual({ status: "rejected", reason: "recipient_busy" });
     await expect(
-      service.swap(
+      runHomeAction(
+        actionRequest({
+          intent: "reassign",
+          assignmentId: id("dishwasher"),
+          recipientMemberId: "member-b",
+          expectedVersion: "1",
+          requestId: "request:stack",
+        }),
+        db(),
+        actionConfig(),
         {
-          first: { assignmentId: id("dishwasher"), expectedVersion: 1 },
-          second: {
-            assignmentId: id("trash", "2026-10-19"),
-            expectedVersion: 1,
-          },
-          requestId: "cross",
-          operationId: "cross",
+          authorize: async () => actor,
+          now: () => now,
+          prepare: prepareCurrentSchedule,
         },
-        commandContext,
       ),
-    ).resolves.toEqual({ status: "rejected", reason: "recipient_ineligible" });
+    ).resolves.toEqual({
+      state: "validation",
+      message:
+        "That member already has a chore that week. Choose a turn to swap instead.",
+    });
     await expect(
       service.swap(
         {

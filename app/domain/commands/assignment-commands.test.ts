@@ -305,6 +305,106 @@ describe("assignment command service", () => {
     ]);
   });
 
+  it.each([false, true])(
+    "allows a balanced household to trade current and future Trash turns (reversed: %s)",
+    async (reversed) => {
+      database.database.exec(
+        "UPDATE households SET balanced_rotation_from = '2026-08-28' WHERE id = 'h'",
+      );
+      insertAssignment(
+        database.database,
+        "busy-current",
+        "c2",
+        "m2",
+        "2026-08-28",
+      );
+      insertAssignment(
+        database.database,
+        "future-trash",
+        "c1",
+        "m2",
+        "2026-09-04",
+      );
+      insertAssignment(
+        database.database,
+        "busy-future",
+        "c2",
+        "m1",
+        "2026-09-04",
+      );
+      const legs = [
+        { assignmentId: "a1", expectedVersion: 1 },
+        { assignmentId: "future-trash", expectedVersion: 1 },
+      ];
+      if (reversed) legs.reverse();
+      const command = {
+        first: legs[0],
+        second: legs[1],
+        requestId: "request-trash-trade",
+        operationId: "operation-trash-trade",
+      };
+      const service = createAssignmentCommandService(database);
+
+      await expect(service.swap(command, context)).resolves.toMatchObject({
+        status: "success",
+        replayed: false,
+      });
+      expect(assignment(database, "a1")).toMatchObject({
+        member_id: "m2",
+        version: 2,
+      });
+      expect(assignment(database, "future-trash")).toMatchObject({
+        member_id: "m1",
+        version: 2,
+      });
+      expect(assignment(database, "busy-current")).toMatchObject({
+        member_id: "m2",
+        version: 1,
+      });
+      expect(assignment(database, "busy-future")).toMatchObject({
+        member_id: "m1",
+        version: 1,
+      });
+      expect(audits(database, command.operationId)).toHaveLength(2);
+      await expect(service.swap(command, context)).resolves.toMatchObject({
+        status: "success",
+        replayed: true,
+      });
+      expect(audits(database, command.operationId)).toHaveLength(2);
+      await expect(
+        service.swap(
+          { ...command, requestId: "stale-trade", operationId: "stale-trade" },
+          context,
+        ),
+      ).resolves.toMatchObject({ status: "conflict" });
+      expect(audits(database, "stale-trade")).toHaveLength(0);
+    },
+  );
+
+  it("rejects a swap involving an inactive owner without changing either turn", async () => {
+    database.database.exec("UPDATE members SET active = 0 WHERE id = 'm2'");
+    await expect(
+      createAssignmentCommandService(database).swap(
+        {
+          first: { assignmentId: "a1", expectedVersion: 1 },
+          second: { assignmentId: "a2", expectedVersion: 1 },
+          requestId: "inactive-swap",
+          operationId: "inactive-swap",
+        },
+        context,
+      ),
+    ).resolves.toEqual({ status: "rejected", reason: "recipient_ineligible" });
+    expect(assignment(database, "a1")).toMatchObject({
+      member_id: "m1",
+      version: 1,
+    });
+    expect(assignment(database, "a2")).toMatchObject({
+      member_id: "m2",
+      version: 1,
+    });
+    expect(audits(database, "inactive-swap")).toHaveLength(0);
+  });
+
   it.each([
     ["missing trusted actor", { ...context, actor: null }],
     [

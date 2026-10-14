@@ -67,6 +67,7 @@ export type AssignmentCommandResult =
         | "invalid_request"
         | "no_op"
         | "past_assignment"
+        | "recipient_busy"
         | "recipient_ineligible";
     }
   | { status: "error" };
@@ -139,7 +140,7 @@ export function createAssignmentCommandService(
             [assignment.assignmentId],
           ))
         ) {
-          return { status: "rejected", reason: "recipient_ineligible" };
+          return { status: "rejected", reason: "recipient_busy" };
         }
 
         const changes = await reassignAssignment(session, {
@@ -228,25 +229,8 @@ export function createAssignmentCommandService(
           return { status: "rejected", reason: "recipient_ineligible" };
         }
 
-        const excludedIds = ordered.map((a) => a.assignmentId);
-        if (
-          !(await recipientCanOwnAssignment(
-            session,
-            context.actor.householdId,
-            ordered[0].assignmentId,
-            ordered[1].memberId,
-            excludedIds,
-          )) ||
-          !(await recipientCanOwnAssignment(
-            session,
-            context.actor.householdId,
-            ordered[1].assignmentId,
-            ordered[0].memberId,
-            excludedIds,
-          ))
-        ) {
-          return { status: "rejected", reason: "recipient_ineligible" };
-        }
+        // An explicit trade balances two turns, not each individual week's load.
+        // Other duties in either week must not prevent current/future swaps.
         const changes = await swapAssignments(session, {
           actorMemberId: context.actor.id,
           householdId: context.actor.householdId,

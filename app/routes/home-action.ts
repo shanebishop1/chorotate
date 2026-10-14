@@ -208,6 +208,8 @@ export async function runHomeAction(
         no_op: "Choose a different active household member or assignment.",
         past_assignment:
           "That assignment week has ended and cannot be changed.",
+        recipient_busy:
+          "That member already has a chore that week. Choose a turn to swap instead.",
         recipient_ineligible: "Choose an active household member.",
       } as const;
       return result.reason === "assignment_not_found"

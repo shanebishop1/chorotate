@@ -165,7 +165,6 @@ const swapSql = `
           AND assignment.local_period_start = ?7
           AND ${periodWeekdaySql("assignment")} = ?8
           AND ${activeAssignmentSql("assignment")}
-          AND ${balancedRecipientSql("assignment", "?4", ["?5", "?9"])}
       )
       AND EXISTS (
         SELECT 1 FROM weekly_assignments AS assignment
@@ -177,7 +176,6 @@ const swapSql = `
           AND assignment.local_period_start = ?11
           AND ${periodWeekdaySql("assignment")} = ?12
           AND ${activeAssignmentSql("assignment")}
-          AND ${balancedRecipientSql("assignment", "?3", ["?5", "?9"])}
       )
   )
   UPDATE weekly_assignments

@@ -439,8 +439,11 @@ with `operator:d1:execute`. The cutover must:
   people earlier in the cycle and minimizing consecutive repeats on ties. It
   cannot prove completion or erase pre-existing lifetime count differences.
 - Set `households.balanced_rotation_from` to the synchronized start date to block
-  reassignments or swaps that would give a recipient two chores in that week.
-  Same-week swaps remain supported and are checked atomically at mutation time.
+  one-time reassignments that would give a recipient two chores in that week.
+  Explicit swaps remain supported across chores and weeks: trading this week's
+  Trash for a future Trash turn can intentionally change the workload in each
+  week while keeping the trade balanced. Both legs are checked and saved
+  atomically, and automatic schedule preparation preserves the agreed trade.
 
 Validate the bridge, every future materialized week, the four-week cycle,
 historical views, and canceled/new reminders. Keep a private backup of the
