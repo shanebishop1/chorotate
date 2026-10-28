@@ -90,5 +90,9 @@ export default defineConfig({
   ],
   test: {
     include: ["tests/workerd/**/*.test.ts"],
+    // These exercise workerd/D1 RPCs and multi-period migrations, not CPU-only
+    // units. Cold shared CI runners can exceed Vitest's 5s unit-test default.
+    // Keep a bounded integration budget without retries or weaker assertions.
+    testTimeout: 30_000,
   },
 });
