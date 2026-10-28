@@ -86,33 +86,62 @@ export function promoteDependabot({
     if (completed && completed.head_sha !== pull.head.sha) continue;
     const files = api(`pulls/${pull.number}/files?per_page=100`);
     if (!eligibleDependabotPull(pull, repository, files)) continue;
-    if (pull.mergeable_state === "behind" || pull.mergeable_state === "dirty") {
-      // Dependabot itself rebases, so its new commit triggers ordinary PR CI.
-      /** @type {Array<{user?: {login: string}; body: string; created_at: string}>} */
-      const comments = api(`issues/${pull.number}/comments?per_page=100`);
-      if (
-        !comments.some(
-          (comment) =>
-            comment.user?.login === "github-actions[bot]" &&
-            comment.body === "@dependabot rebase" &&
-            comment.created_at >= pull.updated_at,
-        )
-      ) {
-        api(`issues/${pull.number}/comments`, [
-          "--method",
-          "POST",
-          "--raw-field",
-          "body=@dependabot rebase",
-        ]);
-      }
+    if (pull.mergeable_state === "dirty") {
       log(
-        `Requested a fresh Dependabot rebase for PR #${pull.number}; no merge.`,
+        `PR #${pull.number} has merge conflicts; human resolution is required before CI and merge.`,
       );
       continue;
     }
+    if (pull.mergeable_state === "behind") {
+      // Dependabot rejects bot-authored rebase comments. Use GitHub's optimistic
+      // branch-update API instead; never checkout PR code with the write token.
+      api(`pulls/${pull.number}/update-branch`, [
+        "--method",
+        "PUT",
+        "--raw-field",
+        `expected_head_sha=${pull.head.sha}`,
+      ]);
+      gh([
+        "workflow",
+        "run",
+        "ci.yml",
+        "--repo",
+        repository,
+        "--ref",
+        pull.head.ref,
+      ]);
+      log(
+        `Requested a SHA-checked branch refresh and fresh CI for PR #${pull.number}; no merge.`,
+      );
+      continue;
+    }
+    /** @type {{workflow_runs?: import("./github-types").CIRun[]}} */
     const { workflow_runs: runs } = api(
       `actions/workflows/ci.yml/runs?head_sha=${pull.head.sha}&per_page=100`,
     );
+    // Branch updates are asynchronous. Reconcile CI for the actual new head
+    // if the immediate dispatch after an update still observed the old one.
+    if (
+      !(runs ?? []).some(
+        (run) =>
+          run.head_sha === pull.head.sha &&
+          ["pull_request", "workflow_dispatch"].includes(run.event),
+      )
+    ) {
+      gh([
+        "workflow",
+        "run",
+        "ci.yml",
+        "--repo",
+        repository,
+        "--ref",
+        pull.head.ref,
+      ]);
+      log(
+        `Requested missing CI for the current head of PR #${pull.number}; no merge.`,
+      );
+      continue;
+    }
     if (
       !passingPullCI(runs ?? [], pull) ||
       pull.mergeable !== true ||
