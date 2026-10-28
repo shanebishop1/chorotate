@@ -119,6 +119,23 @@ export function promoteDependabot({
     const { workflow_runs: runs } = api(
       `actions/workflows/ci.yml/runs?head_sha=${pull.head.sha}&per_page=100`,
     );
+    // GitHub holds PR runs created by GITHUB_TOKEN branch updates for approval.
+    // Only approve after the official-bot, same-repo, and file-scope checks above.
+    // PR tests remain credential-free; no production secrets or write tokens.
+    for (const pending of runs ?? []) {
+      if (
+        pending.head_sha === pull.head.sha &&
+        pending.head_branch === pull.head.ref &&
+        pending.event === "pull_request" &&
+        pending.conclusion === "action_required" &&
+        Number.isSafeInteger(pending.id)
+      ) {
+        api(`actions/runs/${pending.id}/approve`, ["--method", "POST"]);
+        log(
+          `Approved credential-free CI for verified Dependabot PR #${pull.number}; no merge.`,
+        );
+      }
+    }
     // Branch updates are asynchronous. Reconcile CI for the actual new head
     // if the immediate dispatch after an update still observed the old one.
     if (

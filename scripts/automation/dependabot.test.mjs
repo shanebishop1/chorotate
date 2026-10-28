@@ -103,7 +103,8 @@ function exercise({
     } else if (path.endsWith("/update-branch")) {
       assert.ok(args.includes(`expected_head_sha=${sha}`));
       data = { message: "Updating pull request branch" };
-    } else if (path.endsWith("/pulls/12")) data = candidate;
+    } else if (path.endsWith("/approve")) data = {};
+    else if (path.endsWith("/pulls/12")) data = candidate;
     else if (path.endsWith("branches/main"))
       data = { commit: { sha: "b".repeat(40) } };
     else if (path.includes("branch=main")) data = { workflow_runs: [] };
@@ -187,4 +188,23 @@ test("leaves conflicting updates blocked rather than forcing a merge or hiding a
         args[1]?.endsWith("/merge") || args[1]?.endsWith("/update-branch"),
     ),
   );
+});
+
+test("approves only verified Dependabot CI held after a token-authored branch update", () => {
+  const input = exercise({
+    ci: { ...green, id: 123, conclusion: "action_required" },
+  });
+  input.perform();
+  assert.ok(
+    input.commands.some((args) =>
+      args[1]?.endsWith("actions/runs/123/approve"),
+    ),
+  );
+  assert.ok(!input.commands.some((args) => args[1]?.endsWith("/merge")));
+  const spoofed = exercise({
+    ci: { ...green, id: 123, conclusion: "action_required" },
+    candidate: { ...pull, user: { login: "attacker", type: "User" } },
+  });
+  spoofed.perform();
+  assert.ok(!spoofed.commands.some((args) => args[1]?.endsWith("/approve")));
 });

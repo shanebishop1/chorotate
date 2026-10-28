@@ -349,6 +349,13 @@ dispatches main CI after merging because `GITHUB_TOKEN`
 merges do not generate push workflows. Updates needing schema changes, generated
 bindings, or other fixes stay blocked until those fixes pass CI.
 
+Token-authored branch updates can put the ordinary PR workflow in GitHub's
+approval-required state. Promotion approves only the verified official bot's
+same-repository, dependency-only, exact-head CI run; those tests stay read-only
+and credential-free. Token-dispatched branch CI explicitly requests trusted-main
+promotion on success. A ten-minute reconciliation schedule repairs missed
+events and asynchronous updates without ever bypassing required checks.
+
 The `production` GitHub environment must restrict deployments to protected
 branches and contain `PRODUCTION_CONFIG` (the private production environment
 file) and `CLOUDFLARE_API_TOKEN` (the existing deployment token). Worker OAuth and
