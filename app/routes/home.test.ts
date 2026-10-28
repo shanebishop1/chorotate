@@ -188,6 +188,7 @@ function database() {
     "migrations/0006_assignment_integrity.sql",
     "migrations/0007_sms_contact_period_outbox.sql",
     "migrations/0009_schedule_transitions.sql",
+    "migrations/0010_better_auth_account_compatibility.sql",
     "seed/chorotate-local.template.sql",
   ])
     sqlite.exec(readFileSync(resolve(root, file), "utf8"));

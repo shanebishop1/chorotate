@@ -334,15 +334,37 @@ Keep the default time zone (`UTC`). Open `http://localhost:5173`, choose
 
 ## Update an existing deployment
 
-Keep your private JSON, environment file, and Worker secrets. Review incoming
-changes, then from a clean checkout:
+`main` is protected: open a PR and wait for the complete `release-quality` check,
+including the dependency audit. Never waive failed checks for hotfixes or
+pre-existing vulnerabilities. Merging to `main` runs the gate again, then applies
+forward migrations and deploys automatically from the protected `production`
+environment. A failed gate never reaches production.
+
+Daily Dependabot npm and GitHub Actions updates (including majors) use the same
+required checks. The promotion workflow only executes trusted `main` code,
+verifies the official bot and exact green PR SHA, and requests a rebase for stale
+PRs. It explicitly dispatches main CI after merging because `GITHUB_TOKEN`
+merges do not generate push workflows. Updates needing schema changes, generated
+bindings, or other fixes stay blocked until those fixes pass CI.
+
+The `production` GitHub environment must restrict deployments to protected
+branches and contain `PRODUCTION_CONFIG` (the private production environment
+file) and `CLOUDFLARE_API_TOKEN` (the existing deployment token). Worker OAuth and
+SMS secrets remain in Cloudflare and are not copied into GitHub. No private
+configuration is exposed to PR jobs or the promotion workflow.
+
+For a manual retry, use **Actions > CI > Run workflow > main**. Local deployment
+also refuses a dirty checkout, stale/non-main commit, missing CI evidence, or
+failed release job. Keep your private JSON, environment file, and Worker secrets:
 
 ```sh
 git pull --ff-only
 npm ci
 npm run deploy:production:dry-run
+node scripts/deployment/authorize-release.mjs
 npm run operator:d1:migrations:apply
 PRODUCTION_DEPLOY_CONFIRM=chorotate-production npm run deploy:production
+node scripts/deployment/smoke-production.mjs
 ```
 
 Do not rerun bootstrap or re-enter unchanged secrets. Check sign-in and the

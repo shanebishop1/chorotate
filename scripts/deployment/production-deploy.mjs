@@ -16,6 +16,7 @@ import {
   withEmittedDeployConfigCleanup,
 } from "./production-deploy-output.mjs";
 import { loadProductionEnvironment } from "./load-production-environment.mjs";
+import { requireGreenMainRelease } from "./authorize-release.mjs";
 
 loadProductionEnvironment();
 
@@ -186,6 +187,7 @@ if (invalid.size > 0) {
 
 const builtConfigPath = resolve("build/server/wrangler.json");
 try {
+  if (mode === "deploy") requireGreenMainRelease();
   await withEmittedDeployConfigCleanup(builtConfigPath, async () => {
     const { rawConfig } = await experimental_readRawConfig({
       config: resolve("wrangler.jsonc"),

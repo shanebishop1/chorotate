@@ -120,7 +120,7 @@ beforeEach(async () => {
   await applyD1Migrations(database, env.TEST_MIGRATIONS);
 });
 
-describe("Better Auth 1.7.2 on workerd D1", () => {
+describe("Better Auth on workerd D1", () => {
   it("provides AsyncLocalStorage and handles a real empty-session request", async () => {
     const storage = new AsyncLocalStorage<string>();
     await expect(

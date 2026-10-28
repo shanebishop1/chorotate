@@ -45,8 +45,17 @@ check(
 check(
   "install-script allowlist",
   canonical(packageJson.allowScripts) ===
-    canonical({ "esbuild@0.28.1": true, "workerd@1.20260828.1": true }),
-  "esbuild@0.28.1, workerd@1.20260828.1",
+    canonical(
+      Object.fromEntries(
+        Object.entries(lock.packages)
+          .filter(([path]) => /node_modules\/(?:esbuild|workerd)$/.test(path))
+          .map(([path, entry]) => [
+            `${path.split("/").at(-1)}@${entry.version}`,
+            true,
+          ]),
+      ),
+    ),
+  "only the locked esbuild/workerd versions",
 );
 const install = command("npm", ["ls", "--all", "--silent"]);
 check(

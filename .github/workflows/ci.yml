@@ -2,11 +2,13 @@ name: CI
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   release-quality:
@@ -29,3 +31,48 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Credential-free non-mutating release gate
         run: npm run check:release
+
+  deploy-production:
+    needs: release-quality
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: production-deployment
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5
+        with:
+          cache: true
+      - run: npm ci
+      - name: Verify green CI for the exact current main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/deployment/authorize-release.mjs
+      - name: Load private production configuration
+        env:
+          PRODUCTION_CONFIG: ${{ secrets.PRODUCTION_CONFIG }}
+        run: |
+          node --input-type=module -e '
+            import { mkdirSync, writeFileSync } from "node:fs";
+            if (!process.env.PRODUCTION_CONFIG) throw new Error("Production configuration secret is missing");
+            mkdirSync(".chorotate", { recursive: true });
+            writeFileSync(".chorotate/production.env", process.env.PRODUCTION_CONFIG, { mode: 0o600 });
+          '
+      - name: Apply forward migrations and deploy the tested release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_DEPLOY_CONFIRM: chorotate-production
+        run: |
+          npm run operator:d1:migrations:apply
+          npm run deploy:production
+          node scripts/deployment/smoke-production.mjs
+      - name: Remove private configuration
+        if: always()
+        run: |
+          node -e 'require("node:fs").rmSync(".chorotate/production.env", { force: true })'
