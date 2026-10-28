@@ -80,7 +80,7 @@ test("requires successful full CI on the exact current PR head", () => {
   }
 });
 
-/** @param {{ci?: import("./github-types").CIRun; candidate?: import("./github-types").Pull; mergeFails?: boolean; event?: import("./github-types").WorkflowEvent}} [options] */
+/** @param {{ci?: import("./github-types").CIRun | null; candidate?: import("./github-types").Pull; mergeFails?: boolean; event?: import("./github-types").WorkflowEvent}} [options] */
 function exercise({
   ci = green,
   candidate = pull,
@@ -100,13 +100,14 @@ function exercise({
     else if (path.endsWith("/merge")) {
       assert.ok(args.includes(`sha=${sha}`));
       data = { merged: !mergeFails };
-    } else if (path.endsWith("/comments?per_page=100")) data = [];
-    else if (path.endsWith("/comments")) data = {};
-    else if (path.endsWith("/pulls/12")) data = candidate;
+    } else if (path.endsWith("/update-branch")) {
+      assert.ok(args.includes(`expected_head_sha=${sha}`));
+      data = { message: "Updating pull request branch" };
+    } else if (path.endsWith("/pulls/12")) data = candidate;
     else if (path.endsWith("branches/main"))
       data = { commit: { sha: "b".repeat(40) } };
     else if (path.includes("branch=main")) data = { workflow_runs: [] };
-    else if (path.includes("/runs?")) data = { workflow_runs: [ci] };
+    else if (path.includes("/runs?")) data = { workflow_runs: ci ? [ci] : [] };
     else throw new Error(`Unexpected request ${path}`);
     return { status: 0, stdout: JSON.stringify(data) };
   };
@@ -123,7 +124,7 @@ test("merges by exact SHA and explicitly dispatches main CI despite GITHUB_TOKEN
     ),
   );
 });
-test("never merges failing checks and rebases stale PRs instead of bypassing protection", () => {
+test("never merges failing checks and refreshes stale PRs through the API with fresh CI", () => {
   for (const options of [
     { ci: { ...green, conclusion: "failure" } },
     { candidate: { ...pull, mergeable_state: "behind" } },
@@ -131,6 +132,17 @@ test("never merges failing checks and rebases stale PRs instead of bypassing pro
     const input = exercise(options);
     input.perform();
     assert.ok(!input.commands.some((args) => args[1]?.endsWith("/merge")));
+    if (options.candidate) {
+      assert.ok(
+        input.commands.some((args) => args[1]?.endsWith("/update-branch")),
+      );
+      assert.ok(
+        input.commands.some(
+          (args) => args[0] === "workflow" && args.includes(pull.head.ref),
+        ),
+      );
+      assert.ok(!input.commands.some((args) => args[1]?.includes("/comments")));
+    }
   }
 });
 test("refuses failed merge responses and ignores stale or fork workflow events", () => {
@@ -153,4 +165,26 @@ test("refuses failed merge responses and ignores stale or fork workflow events",
     input.perform();
     assert.ok(!input.commands.some((args) => args[1]?.endsWith("/merge")));
   }
+});
+
+test("dispatches CI for the actual head if an asynchronous refresh raced the first dispatch", () => {
+  const input = exercise({ ci: null });
+  input.perform();
+  assert.ok(!input.commands.some((args) => args[1]?.endsWith("/merge")));
+  assert.ok(
+    input.commands.some(
+      (args) => args[0] === "workflow" && args.includes(pull.head.ref),
+    ),
+  );
+});
+
+test("leaves conflicting updates blocked rather than forcing a merge or hiding a failure", () => {
+  const input = exercise({ candidate: { ...pull, mergeable_state: "dirty" } });
+  input.perform();
+  assert.ok(
+    !input.commands.some(
+      (args) =>
+        args[1]?.endsWith("/merge") || args[1]?.endsWith("/update-branch"),
+    ),
+  );
 });

@@ -342,8 +342,10 @@ environment. A failed gate never reaches production.
 
 Daily Dependabot npm and GitHub Actions updates (including majors) use the same
 required checks. The promotion workflow only executes trusted `main` code,
-verifies the official bot and exact green PR SHA, and requests a rebase for stale
-PRs. It explicitly dispatches main CI after merging because `GITHUB_TOKEN`
+verifies the official bot and exact green PR SHA, and refreshes stale PR branches
+through GitHub's expected-head-SHA branch-update API with fresh CI. (Dependabot
+does not accept rebase comments from `github-actions[bot]`.) It explicitly
+dispatches main CI after merging because `GITHUB_TOKEN`
 merges do not generate push workflows. Updates needing schema changes, generated
 bindings, or other fixes stay blocked until those fixes pass CI.
 
