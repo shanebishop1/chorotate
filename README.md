@@ -33,7 +33,7 @@ Never directly read any personal information/emails/credentials.
 - Builds a recurring schedule for each chore, including chores that turn over on different weekdays.
 - Shows current and upcoming assignments for the household and each member.
 - Provides a household calendar and history of changes.
-- Lets authorized members reassign a turn or swap two assignments.
+- Swaps turns one for one within the same chore, with an explicit warning and acknowledgement for one-time reassignments instead.
 - Prevents changes to completed periods and detects conflicting edits.
 - Records an audit history of automatic and manual assignment changes.
 - Sends optional, consent-based SMS reminders without exposing contact details in the UI.

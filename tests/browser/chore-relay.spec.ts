@@ -347,7 +347,7 @@ test("Household owns swap and every rendered on-duty cell opens its assignment",
   await page.getByRole("button", { name: "Close dialog" }).click();
 });
 
-test("two-step reassign submits exact one-time and optional balanced-swap payloads", async ({
+test("reassign requires a same-chore return turn or an acknowledged one-time override", async ({
   page,
 }) => {
   await page.goto("/?view=now");
@@ -361,10 +361,14 @@ test("two-step reassign submits exact one-time and optional balanced-swap payloa
   await expect(dialog).not.toContainText("Before → after");
   await expect(
     page.getByRole("dialog", { name: "Review Trash change" }),
-  ).toContainText("extra turn");
+  ).toContainText("Swap one for one");
   await expect(
     page.getByRole("button", { name: /Balance with a future turn:/ }),
-  ).toContainText("Keep as a one-time change");
+  ).toContainText("Choose a matching future turn");
+  await expect(
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeDisabled();
+  await expect(dialog.locator('input[name="intent"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.locator(".change-dialog")).toHaveAccessibleName(
     "Reassign Trash",
@@ -372,14 +376,27 @@ test("two-step reassign submits exact one-time and optional balanced-swap payloa
   await expect(page.getByRole("radio", { name: /Member D/ })).toBeChecked();
   await page.getByRole("button", { name: "Continue" }).click();
 
+  await page.getByRole("button", { name: "Continue without a swap…" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Reassign without a swap?" }),
+  ).toContainText("one-time reassignment, not a swap");
+  await expect(
+    page.getByRole("heading", { name: "A fair swap is one turn for one turn" }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Confirm one-time change" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("checkbox")).not.toBeChecked();
+  await page.getByRole("checkbox").check();
+
   expect(await formPayload(page.locator(".change-dialog"))).toEqual({
     assignmentId: "2026-08-28-trash",
     expectedVersion: "1",
     intent: "reassign",
+    oneTimeOverride: "true",
     recipientMemberId: "member-d",
     requestId: expect.stringMatching(/^request:/),
   });
-  await page.getByRole("button", { name: "Confirm change" }).click();
+  await page.getByRole("button", { name: "Confirm one-time change" }).click();
   await expect(page.getByRole("status")).toContainText("handoff was saved");
 
   await open.click();
@@ -392,8 +409,9 @@ test("two-step reassign submits exact one-time and optional balanced-swap payloa
   const candidates = page.getByRole("listbox", {
     name: "Balance with a future turn options",
   });
-  await expect(candidates.getByRole("option")).toHaveCount(3);
+  await expect(candidates.getByRole("option")).toHaveCount(2);
   await expect(candidates).not.toContainText("Aug 28");
+  await expect(candidates).not.toContainText("Dishwasher");
   await candidates.getByRole("option", { name: /Trash — Fri, Sep 4/ }).click();
   expect(await formPayload(page.getByRole("dialog"))).toEqual({
     firstAssignmentId: "2026-08-28-trash",
@@ -403,7 +421,13 @@ test("two-step reassign submits exact one-time and optional balanced-swap payloa
     secondAssignmentId: "2026-09-04-trash",
     secondExpectedVersion: "1",
   });
-  await page.getByRole("button", { name: "Confirm change" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review both swap legs" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Confirm swap" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Both swap legs moved together",
+  );
 });
 
 test("dialog fits, exposes review semantics, and restores keyboard focus", async ({
@@ -428,8 +452,8 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
     page.getByRole("heading", { name: "Review this change" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Confirm change" }),
-  ).toBeEnabled();
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeDisabled();
   const reviewDialog = page.getByRole("dialog", {
     name: "Review Trash change",
   });
@@ -453,6 +477,99 @@ test("dialog fits, exposes review semantics, and restores keyboard focus", async
   await expect(opener).toBeFocused();
 });
 
+test("Dishwasher trades only offer the recipient's future Dishwasher turns", async ({
+  page,
+}) => {
+  await page.goto("/?view=now");
+  await page
+    .getByRole("article")
+    .filter({ hasText: "Dishwasher" })
+    .getByRole("button", { name: "Reassign" })
+    .click();
+  await page.getByRole("radio", { name: /Member A/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: /Balance with a future turn:/ })
+    .click();
+  const options = page.getByRole("listbox", {
+    name: "Balance with a future turn options",
+  });
+  await expect(options.getByRole("option")).toHaveCount(2);
+  await expect(options).not.toContainText("Trash");
+  await options
+    .getByRole("option", { name: /Dishwasher — Mon, Sep 14/ })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("heading", { name: "Review both swap legs" }),
+  ).toBeVisible();
+  const payload = await formPayload(page.getByRole("dialog"));
+  expect(payload.firstAssignmentId).toBe("2026-08-31-dishwasher");
+  expect(payload.secondAssignmentId).toBe("2026-09-14-dishwasher");
+});
+
+test("no matching future turn requires choosing another member or the explicit override", async ({
+  page,
+}) => {
+  await page.goto("/?view=household");
+  await page
+    .getByRole("button", { name: /Reassign Trash, Fri, Sep 4/ })
+    .first()
+    .click();
+  await page.getByRole("radio", { name: /Member A/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText(
+    "Member A has no future Trash turns available",
+  );
+  await expect(
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Continue without a swap…" }).click();
+  await expect(dialog).toHaveAccessibleName("Reassign without a swap?");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(dialog).toHaveAccessibleName("Review Trash change");
+  await expect(dialog.locator('input[name="oneTimeOverride"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Confirm swap" }),
+  ).toBeDisabled();
+});
+
+test("household swap filters by chore and clears the return turn when the first changes", async ({
+  page,
+}) => {
+  await page.goto("/?view=household");
+  await page.getByRole("button", { name: "Swap", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /Second turn:/ }),
+  ).toBeDisabled();
+  await chooseDropdown(page, "First turn", "2026-08-28-trash");
+  await page.getByRole("button", { name: /Second turn:/ }).click();
+  const options = page.getByRole("listbox", { name: "Second turn options" });
+  await expect(options).not.toContainText("Dishwasher");
+  await expect(options).not.toContainText("Aug 28");
+  await options.getByRole("option", { name: /Trash — Fri, Sep 4/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Confirm", exact: true }),
+  ).toBeEnabled();
+  await chooseDropdown(page, "First turn", "2026-08-31-dishwasher");
+  await expect(
+    page.getByRole("button", { name: /Second turn:/ }),
+  ).toContainText("Choose an assignment");
+  await expect(
+    page.getByRole("button", { name: "Confirm", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: /Second turn:/ }).click();
+  await expect(options).not.toContainText("Trash");
+  await expect(options).not.toContainText("Aug 31");
+  await expect(options).not.toContainText("Member C");
+});
+
 test("dialog closes only from its backdrop and protects pending changes", async ({
   page,
 }) => {
@@ -472,7 +589,7 @@ test("dialog closes only from its backdrop and protects pending changes", async 
 
   await opener.click();
   await chooseDropdown(page, "First turn", "2026-08-28-trash");
-  await chooseDropdown(page, "Second turn", "2026-08-31-dishwasher");
+  await chooseDropdown(page, "Second turn", "2026-09-04-trash");
   await expect(dialog).not.toContainText("Before → after");
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Saving…" })).toBeDisabled();
@@ -705,13 +822,13 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   const dialog = page.getByRole("dialog", { name: "Swap two turns" });
   await expect(dialog).toBeVisible();
   await chooseDropdown(page, "First turn", "2026-08-28-trash");
-  await chooseDropdown(page, "Second turn", "2026-08-31-dishwasher");
+  await chooseDropdown(page, "Second turn", "2026-09-04-trash");
   await expect(page.getByRole("button", { name: /First turn:/ })).toContainText(
     "Trash — Fri, Aug 28 – Thu, Sep 3 — Member A",
   );
   await expect(
     page.getByRole("button", { name: /Second turn:/ }),
-  ).toContainText("Dishwasher — Mon, Aug 31 – Sun, Sep 6 — Member C");
+  ).toContainText("Trash — Fri, Sep 4 – Thu, Sep 10 — Member B");
   await expect(
     page.getByRole("heading", { name: "Review both swap legs" }),
   ).toBeVisible();
@@ -723,13 +840,13 @@ test("atomic swap dialog reviews both legs and keeps its action fitted", async (
   await expect(dialog).not.toContainText("Both assignments update together");
   await expect(dialog).not.toContainText("confirm as one operation");
   await expect(dialog).toContainText("Fri, Aug 28 – Thu, Sep 3");
-  await expect(dialog).toContainText("Mon, Aug 31 – Sun, Sep 6");
+  await expect(dialog).toContainText("Fri, Sep 4 – Thu, Sep 10");
   expect(await formPayload(dialog)).toEqual({
     firstAssignmentId: "2026-08-28-trash",
     firstExpectedVersion: "1",
     intent: "swap",
     requestId: expect.stringMatching(/^request:/),
-    secondAssignmentId: "2026-08-31-dishwasher",
+    secondAssignmentId: "2026-09-04-trash",
     secondExpectedVersion: "1",
   });
   const confirm = page.getByRole("button", { name: "Confirm", exact: true });
@@ -758,7 +875,9 @@ test("stale recovery names refreshed ownership values and requires intentional r
   const dialog = page.locator(".change-dialog");
   await page.getByRole("radio", { name: /Member B/ }).check();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: "Confirm change" }).click();
+  await page.getByRole("button", { name: "Continue without a swap…" }).click();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Confirm one-time change" }).click();
 
   const issue = dialog.getByRole("alert");
   await expect(issue).toBeFocused();
@@ -766,7 +885,7 @@ test("stale recovery names refreshed ownership values and requires intentional r
   await expect(issue).toContainText("Fri, Aug 28 – Thu, Sep 3");
   await expect(issue).toContainText("Current owner: Member C");
   await expect(
-    page.getByRole("button", { name: "Confirm change" }),
+    page.getByRole("button", { name: "Confirm one-time change" }),
   ).toBeDisabled();
 
   await page.getByRole("button", { name: "Review current values" }).click();
@@ -780,7 +899,7 @@ test("stale recovery names refreshed ownership values and requires intentional r
   await expect(dialog).toContainText("New");
   await expect(dialog).toContainText("Member B");
   await expect(
-    page.getByRole("button", { name: "Confirm change" }),
+    page.getByRole("button", { name: "Confirm one-time change" }),
   ).toBeEnabled();
 });
 
@@ -808,7 +927,11 @@ for (const ended of [
     await expect(dialog).toHaveAccessibleName(`Reassign ${ended.chore}`);
     await page.getByRole("radio", { name: /Member A/ }).check();
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Confirm change" }).click();
+    await page
+      .getByRole("button", { name: "Continue without a swap…" })
+      .click();
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Confirm one-time change" }).click();
 
     const issue = dialog.getByRole("alert");
     await expect(issue).toContainText("ownership period has ended");

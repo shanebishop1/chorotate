@@ -10,6 +10,7 @@ import {
 
 interface AssignmentRow {
   assignment_id: unknown;
+  chore_id: unknown;
   household_id: unknown;
   household_time_zone: unknown;
   local_period_start: unknown;
@@ -26,6 +27,7 @@ interface AssignmentRow {
 
 export interface AssignmentState {
   assignmentId: string;
+  choreId: string;
   householdId: string;
   householdTimeZone: string;
   localPeriodStart: LocalDate;
@@ -84,6 +86,7 @@ export interface SwapAssignmentsMutation {
 
 const assignmentColumns = `
   assignment.id AS assignment_id,
+  assignment.chore_id,
   assignment.household_id,
   household.time_zone AS household_time_zone,
   assignment.local_period_start,
@@ -154,6 +157,11 @@ const swapSql = `
       AND EXISTS (
         SELECT 1 FROM members
         WHERE id = ?4 AND household_id = ?2 AND active = 1
+      )
+      AND EXISTS (
+        SELECT 1 FROM weekly_assignments first_turn
+        JOIN weekly_assignments second_turn ON second_turn.chore_id = first_turn.chore_id
+        WHERE first_turn.id = ?5 AND second_turn.id = ?9
       )
       AND EXISTS (
         SELECT 1 FROM weekly_assignments AS assignment
@@ -351,6 +359,7 @@ async function executeMutation(
 function parseAssignment(row: AssignmentRow): AssignmentState {
   if (
     !isIdentifier(row.assignment_id) ||
+    !isIdentifier(row.chore_id) ||
     !isIdentifier(row.household_id) ||
     !validTimeZone(row.household_time_zone) ||
     !isLocalDate(row.local_period_start) ||
@@ -368,6 +377,7 @@ function parseAssignment(row: AssignmentRow): AssignmentState {
   }
   return {
     assignmentId: row.assignment_id,
+    choreId: row.chore_id,
     householdId: row.household_id,
     householdTimeZone: row.household_time_zone,
     localPeriodStart: row.local_period_start,

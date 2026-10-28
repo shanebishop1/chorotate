@@ -14,6 +14,7 @@ import {
   createAssignmentCommandService,
   type AssignmentCommandContext,
 } from "./assignment-commands";
+import { swapAssignments } from "./assignment-persistence";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const migrations = [
@@ -265,10 +266,17 @@ describe("assignment command service", () => {
   });
 
   it("atomically swaps both legs under one operation group", async () => {
+    insertAssignment(
+      database.database,
+      "future-trash",
+      "c1",
+      "m2",
+      "2026-09-04",
+    );
     const result = await createAssignmentCommandService(database).swap(
       {
         first: { assignmentId: "a1", expectedVersion: 1 },
-        second: { assignmentId: "a2", expectedVersion: 1 },
+        second: { assignmentId: "future-trash", expectedVersion: 1 },
         requestId: "request-swap",
         operationId: "operation-swap",
       },
@@ -280,7 +288,7 @@ describe("assignment command service", () => {
       replayed: false,
       assignments: [
         { assignmentId: "a1", memberId: "m2", version: 2 },
-        { assignmentId: "a2", memberId: "m1", version: 2 },
+        { assignmentId: "future-trash", memberId: "m1", version: 2 },
       ],
     });
     expect(audits(database, "operation-swap")).toEqual([
@@ -294,16 +302,47 @@ describe("assignment command service", () => {
         local_period_start: "2026-08-28",
       }),
       expect.objectContaining({
-        assignment_id: "a2",
+        assignment_id: "future-trash",
         actor_member_id: "m1",
         request_id: "request-swap",
         operation_id: "operation-swap",
         before_member_id: "m2",
         after_member_id: "m1",
-        local_period_start: "2026-08-31",
+        local_period_start: "2026-09-04",
       }),
     ]);
   });
+
+  it.each([false, true])(
+    "rejects cross-chore swaps without moving either leg (reversed: %s)",
+    async (reversed) => {
+      const legs = [
+        { assignmentId: "a1", expectedVersion: 1 },
+        { assignmentId: "a2", expectedVersion: 1 },
+      ];
+      if (reversed) legs.reverse();
+      await expect(
+        createAssignmentCommandService(database).swap(
+          {
+            first: legs[0],
+            second: legs[1],
+            requestId: "mismatch",
+            operationId: "mismatch",
+          },
+          context,
+        ),
+      ).resolves.toEqual({ status: "rejected", reason: "chore_mismatch" });
+      expect(assignment(database, "a1")).toMatchObject({
+        member_id: "m1",
+        version: 1,
+      });
+      expect(assignment(database, "a2")).toMatchObject({
+        member_id: "m2",
+        version: 1,
+      });
+      expect(audits(database, "mismatch")).toHaveLength(0);
+    },
+  );
 
   it.each([false, true])(
     "allows a balanced household to trade current and future Trash turns (reversed: %s)",
@@ -380,6 +419,38 @@ describe("assignment command service", () => {
       expect(audits(database, "stale-trade")).toHaveLength(0);
     },
   );
+
+  it("also blocks cross-chore trades in the atomic persistence statement", async () => {
+    await expect(
+      swapAssignments(database, {
+        actorMemberId: "m1",
+        householdId: "h",
+        firstMemberId: "m1",
+        secondMemberId: "m2",
+        firstAssignmentId: "a1",
+        firstExpectedVersion: 1,
+        firstLocalPeriodStart: "2026-08-28",
+        firstOwnershipStartWeekday: 5,
+        secondAssignmentId: "a2",
+        secondExpectedVersion: 1,
+        secondLocalPeriodStart: "2026-08-31",
+        secondOwnershipStartWeekday: 1,
+        timeZone: context.timeZone,
+        requestId: "storage-mismatch",
+        operationId: "storage-mismatch",
+        occurredAt: context.occurredAt,
+      }),
+    ).resolves.toBe(0);
+    expect(assignment(database, "a1")).toMatchObject({
+      member_id: "m1",
+      version: 1,
+    });
+    expect(assignment(database, "a2")).toMatchObject({
+      member_id: "m2",
+      version: 1,
+    });
+    expect(audits(database, "storage-mismatch")).toHaveLength(0);
+  });
 
   it("rejects a swap involving an inactive owner without changing either turn", async () => {
     database.database.exec("UPDATE members SET active = 0 WHERE id = 'm2'");
@@ -641,8 +712,15 @@ describe("assignment command service", () => {
   });
 
   it("rolls back both swap legs and trigger audits when either trigger fails", async () => {
+    insertAssignment(
+      database.database,
+      "future-trash",
+      "c1",
+      "m2",
+      "2026-09-04",
+    );
     database.database.exec(`CREATE TRIGGER fail_second_swap
-      BEFORE UPDATE ON weekly_assignments WHEN OLD.id = 'a2'
+      BEFORE UPDATE ON weekly_assignments WHEN OLD.id = 'future-trash'
       BEGIN SELECT RAISE(ABORT, 'private database detail'); END;`);
     const reported: string[] = [];
     const service = createAssignmentCommandService(database, {
@@ -652,7 +730,7 @@ describe("assignment command service", () => {
     const result = await service.swap(
       {
         first: { assignmentId: "a1", expectedVersion: 1 },
-        second: { assignmentId: "a2", expectedVersion: 1 },
+        second: { assignmentId: "future-trash", expectedVersion: 1 },
         requestId: "rollback",
         operationId: "rollback-op",
       },
@@ -664,7 +742,7 @@ describe("assignment command service", () => {
       member_id: "m1",
       version: 1,
     });
-    expect(assignment(database, "a2")).toMatchObject({
+    expect(assignment(database, "future-trash")).toMatchObject({
       member_id: "m2",
       version: 1,
     });

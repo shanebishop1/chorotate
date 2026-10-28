@@ -403,6 +403,7 @@ describe("authenticated home route integration", () => {
       request(
         new URLSearchParams({
           intent: "reassign",
+          oneTimeOverride: "true",
           assignmentId: "assignment:chorotate:2026-08-28:trash",
           recipientMemberId: "member-b",
           expectedVersion: "1",
@@ -454,6 +455,7 @@ describe("authenticated home route integration", () => {
         request(
           new URLSearchParams({
             intent: "reassign",
+            oneTimeOverride: "true",
             assignmentId: "assignment:chorotate:2026-08-28:trash",
             recipientMemberId: "member-b",
             expectedVersion: "1",
@@ -469,6 +471,7 @@ describe("authenticated home route integration", () => {
         request(
           new URLSearchParams({
             intent: "reassign",
+            oneTimeOverride: "true",
             assignmentId: "assignment:chorotate:2026-08-31:dishwasher",
             recipientMemberId: "member-b",
             expectedVersion: "1",
@@ -490,7 +493,7 @@ describe("authenticated home route integration", () => {
           intent: "swap",
           firstAssignmentId: "assignment:chorotate:2026-08-28:trash",
           firstExpectedVersion: "1",
-          secondAssignmentId: "assignment:chorotate:2026-08-31:dishwasher",
+          secondAssignmentId: "assignment:chorotate:2026-09-04:trash",
           secondExpectedVersion: "1",
         }),
       ),
@@ -504,11 +507,11 @@ describe("authenticated home route integration", () => {
         .prepare(
           `SELECT group_concat(member_id, ',') AS owners FROM weekly_assignments
            WHERE id IN ('assignment:chorotate:2026-08-28:trash',
-                        'assignment:chorotate:2026-08-31:dishwasher')
-           ORDER BY chore_id`,
+                         'assignment:chorotate:2026-09-04:trash')
+            ORDER BY local_period_start`,
         )
         .get(),
-    ).toEqual({ owners: "member-c,member-a" });
+    ).toEqual({ owners: "member-b,member-a" });
     const operation = fixture.sqlite
       .prepare(
         "SELECT operation_id,count(*) AS legs FROM assignment_audit_events WHERE operation_kind='swap' GROUP BY operation_id",
@@ -517,10 +520,75 @@ describe("authenticated home route integration", () => {
     expect(operation.legs).toBe(2);
   });
 
+  it("rejects a crafted cross-chore swap without assignment or audit changes", async () => {
+    const fixture = database();
+    const before = fixture.sqlite
+      .prepare(
+        "SELECT id, member_id, version FROM weekly_assignments ORDER BY id",
+      )
+      .all();
+    await expect(
+      runHomeAction(
+        request(
+          new URLSearchParams({
+            intent: "swap",
+            firstAssignmentId: "assignment:chorotate:2026-08-28:trash",
+            firstExpectedVersion: "1",
+            secondAssignmentId: "assignment:chorotate:2026-09-07:dishwasher",
+            secondExpectedVersion: "1",
+          }),
+        ),
+        fixture.database,
+        config,
+        actionServices,
+      ),
+    ).resolves.toMatchObject({
+      state: "validation",
+      message: expect.stringContaining("same chore"),
+    });
+    expect(
+      fixture.sqlite
+        .prepare(
+          "SELECT id, member_id, version FROM weekly_assignments ORDER BY id",
+        )
+        .all(),
+    ).toEqual(before);
+    expect(
+      fixture.sqlite
+        .prepare(
+          "SELECT count(*) AS count FROM assignment_audit_events WHERE operation_kind='swap'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it.each([undefined, "false", "yes"])(
+    "requires an explicit one-time override (value: %s)",
+    async (override) => {
+      const fixture = database();
+      const body = new URLSearchParams({
+        intent: "reassign",
+        assignmentId: "assignment:chorotate:2026-08-28:trash",
+        recipientMemberId: "member-b",
+        expectedVersion: "1",
+      });
+      if (override !== undefined) body.set("oneTimeOverride", override);
+      await expect(
+        runHomeAction(request(body), fixture.database, config, actionServices),
+      ).resolves.toMatchObject({ state: "validation" });
+      expect(
+        fixture.sqlite
+          .prepare("SELECT version FROM weekly_assignments WHERE id=?")
+          .get(body.get("assignmentId")),
+      ).toEqual({ version: 1 });
+    },
+  );
+
   it("returns current values on a stale conflict without overwriting", async () => {
     const fixture = database();
     const body = new URLSearchParams({
       intent: "reassign",
+      oneTimeOverride: "true",
       assignmentId: "assignment:chorotate:2026-08-28:trash",
       recipientMemberId: "member-b",
       expectedVersion: "1",
@@ -559,6 +627,7 @@ describe("authenticated home route integration", () => {
     const fixture = database();
     const body = new URLSearchParams({
       intent: "reassign",
+      oneTimeOverride: "true",
       assignmentId: "assignment:chorotate:2026-08-28:trash",
       recipientMemberId: "member-b",
       expectedVersion: "1",
@@ -651,6 +720,7 @@ describe("authenticated home route integration", () => {
     const fixture = database();
     const unknown = new URLSearchParams({
       intent: "reassign",
+      oneTimeOverride: "true",
       assignmentId: "x",
       recipientMemberId: "member-b",
       expectedVersion: "1",
@@ -668,6 +738,7 @@ describe("authenticated home route integration", () => {
     ).toBe("validation");
     const duplicate = new URLSearchParams({
       intent: "reassign",
+      oneTimeOverride: "true",
       assignmentId: "x",
       recipientMemberId: "member-b",
       expectedVersion: "01",

@@ -46,7 +46,7 @@ export type DialogState = (
       kind: "reassign";
       assignmentId: string;
       recipientId: string;
-      step: "recipient" | "review";
+      step: "recipient" | "review" | "override";
       balanceAssignmentId: string;
       requestId: string;
     }

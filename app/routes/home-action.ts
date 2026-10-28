@@ -134,10 +134,16 @@ export async function runHomeAction(
         "recipientMemberId",
         "expectedVersion",
         "requestId",
+        "oneTimeOverride",
       ];
       const assignmentId = one(form, "assignmentId");
       const recipientMemberId = one(form, "recipientMemberId");
       const expectedVersion = version(form, "expectedVersion");
+      if (one(form, "oneTimeOverride") !== "true") {
+        return validation(
+          "Swaps are one for one. Choose a matching future turn, or explicitly confirm a one-time reassignment without a swap.",
+        );
+      }
       if (
         !exactKeys(form, keys) ||
         assignmentId === null ||
@@ -211,6 +217,8 @@ export async function runHomeAction(
         recipient_busy:
           "That member already has a chore that week. Choose a turn to swap instead.",
         recipient_ineligible: "Choose an active household member.",
+        chore_mismatch:
+          "Swap like for like: choose two turns of the same chore, such as Dishwasher for Dishwasher or Trash for Trash.",
       } as const;
       return result.reason === "assignment_not_found"
         ? denial(messages[result.reason])

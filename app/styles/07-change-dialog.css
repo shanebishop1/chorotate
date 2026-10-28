@@ -148,6 +148,26 @@
   font-size: 0.7rem;
 }
 
+.override-acknowledgement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.override-acknowledgement input {
+  margin-top: 3px;
+  accent-color: var(--relay);
+}
+
+.swap-guidance {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .swap-picker {
   position: relative;
   display: grid;

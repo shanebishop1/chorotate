@@ -22,6 +22,10 @@ import type { DialogState } from "./types";
 
 type ActionFetcher = ReturnType<typeof useFetcher<HomeActionData>>;
 
+function focusOverrideHeading(node: HTMLHeadingElement | null) {
+  node?.focus();
+}
+
 export function ChangeDialog({
   dialogRef,
   dialog,
@@ -110,6 +114,8 @@ export function ChangeDialog({
       ? chronological(assignments).filter(
           (candidate) =>
             candidate.assignmentId !== dialog.assignmentId &&
+            candidate.chore.id === assignment?.chore.id &&
+            candidate.member.active &&
             candidate.member.id === recipient.id &&
             candidate.period.localStartDate > localToday,
         )
@@ -118,6 +124,10 @@ export function ChangeDialog({
     first &&
     second &&
     first.assignmentId !== second.assignmentId &&
+    first.chore.id === second.chore.id &&
+    first.member.active &&
+    second.member.active &&
+    second.period.localStartDate > localToday &&
     first.member.id !== second.member.id,
   );
   const validRecipient = Boolean(
@@ -128,6 +138,9 @@ export function ChangeDialog({
     balanceAssignment &&
     recipient &&
     balanceAssignment.member.id === recipient.id &&
+    eligibleBalanceAssignments.some(
+      ({ assignmentId }) => assignmentId === balanceAssignment.assignmentId,
+    ) &&
     balanceAssignment.member.id !== assignment?.member.id,
   );
   const selectedAssignments = [
@@ -155,7 +168,21 @@ export function ChangeDialog({
         if (event.target === event.currentTarget && !pending) onClose();
       }}
     >
-      <fetcher.Form method="post">
+      <fetcher.Form
+        method="post"
+        onSubmit={(event) => {
+          if (
+            pending ||
+            (conflict && !reviewedConflict) ||
+            (dialog.kind === "reassign"
+              ? !validRecipient ||
+                dialog.step === "recipient" ||
+                (dialog.step === "review" && !validBalancedSwap)
+              : !validSwap)
+          )
+            event.preventDefault();
+        }}
+      >
         <header className="dialog-header">
           <div>
             <p className="eyebrow">Confirm change</p>
@@ -163,7 +190,9 @@ export function ChangeDialog({
               {dialog.kind === "reassign"
                 ? dialog.step === "recipient"
                   ? `Reassign ${assignment?.chore.name ?? "chore"}`
-                  : `Review ${assignment?.chore.name ?? "chore"} change`
+                  : dialog.step === "override"
+                    ? "Reassign without a swap?"
+                    : `Review ${assignment?.chore.name ?? "chore"} change`
                 : "Swap two turns"}
             </h2>
             {dialog.kind === "reassign" ? (
@@ -220,7 +249,9 @@ export function ChangeDialog({
               </fieldset>
             ) : recipient && validRecipient ? (
               <>
-                {balanceAssignment ? (
+                {dialog.step === "review" &&
+                validBalancedSwap &&
+                balanceAssignment ? (
                   <>
                     <input type="hidden" name="intent" value="swap" />
                     <input
@@ -244,9 +275,10 @@ export function ChangeDialog({
                       value={balanceAssignment.version}
                     />
                   </>
-                ) : (
+                ) : dialog.step === "override" ? (
                   <>
                     <input type="hidden" name="intent" value="reassign" />
+                    <input type="hidden" name="oneTimeOverride" value="true" />
                     <input
                       type="hidden"
                       name="assignmentId"
@@ -263,43 +295,92 @@ export function ChangeDialog({
                       value={assignment.version}
                     />
                   </>
-                )}
+                ) : null}
                 <ReassignReview assignment={assignment} recipient={recipient} />
-                <section
-                  className="balance-choice"
-                  aria-labelledby="balance-title"
-                >
-                  <h3 id="balance-title">
-                    Keep it one-time or balance the turn
-                  </h3>
-                  <p>
-                    Confirm the one-time change and {recipient.displayName}{" "}
-                    receives an extra turn, or choose one of their future turns
-                    to give to {assignment.member.displayName}.
-                  </p>
-                  <CustomDropdown
-                    id="balance-assignment"
-                    label="Balance with a future turn"
-                    value={dialog.balanceAssignmentId}
-                    disabled={pending}
-                    options={[
-                      { value: "", label: "Keep as a one-time change" },
-                      ...eligibleBalanceAssignments.map((candidate) => ({
-                        value: candidate.assignmentId,
-                        label: `${candidate.chore.name} — ${formatPeriod(candidate.period)}`,
-                      })),
-                    ]}
-                    onChange={(balanceAssignmentId) =>
-                      onChange({ ...dialog, balanceAssignmentId })
-                    }
-                  />
-                  {eligibleBalanceAssignments.length === 0 ? (
-                    <p className="balance-empty">
-                      No eligible future turns are available to balance this
-                      change.
+                {dialog.step === "override" ? (
+                  <section
+                    className="balance-choice"
+                    aria-labelledby="override-title"
+                  >
+                    <h3
+                      id="override-title"
+                      tabIndex={-1}
+                      ref={focusOverrideHeading}
+                    >
+                      A fair swap is one turn for one turn
+                    </h3>
+                    <p>
+                      Normally, trade {assignment.chore.name} for a future{" "}
+                      {assignment.chore.name} turn. Without a return turn,{" "}
+                      {recipient.displayName} takes an extra{" "}
+                      {assignment.chore.name} turn and{" "}
+                      {assignment.member.displayName} does not take one back.
+                      This is a one-time reassignment, not a swap.
                     </p>
-                  ) : null}
-                </section>
+                    <label className="override-acknowledgement">
+                      <input type="checkbox" required disabled={pending} />
+                      I understand this gives {recipient.displayName} an extra
+                      turn with no return swap.
+                    </label>
+                  </section>
+                ) : (
+                  <section
+                    className="balance-choice"
+                    aria-labelledby="balance-title"
+                  >
+                    <h3 id="balance-title">Swap one for one · same chore</h3>
+                    <p>
+                      {recipient.displayName} takes this {assignment.chore.name}{" "}
+                      turn. Choose one of their future {assignment.chore.name}{" "}
+                      turns for {assignment.member.displayName} in return.
+                      Dishwasher for Dishwasher, Trash for Trash — never a
+                      different chore.
+                    </p>
+                    <CustomDropdown
+                      id="balance-assignment"
+                      label="Balance with a future turn"
+                      value={dialog.balanceAssignmentId}
+                      disabled={pending}
+                      options={[
+                        { value: "", label: "Choose a matching future turn" },
+                        ...eligibleBalanceAssignments.map((candidate) => ({
+                          value: candidate.assignmentId,
+                          label: `${candidate.chore.name} — ${formatPeriod(candidate.period)}`,
+                        })),
+                      ]}
+                      onChange={(balanceAssignmentId) =>
+                        onChange({ ...dialog, balanceAssignmentId })
+                      }
+                    />
+                    {eligibleBalanceAssignments.length === 0 ? (
+                      <p className="balance-empty">
+                        {recipient.displayName} has no future{" "}
+                        {assignment.chore.name} turns available in the loaded
+                        schedule. Choose another member or explicitly continue
+                        without a swap.
+                      </p>
+                    ) : null}
+                    <button
+                      className="button quiet"
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        onChange({
+                          ...dialog,
+                          step: "override",
+                          balanceAssignmentId: "",
+                        })
+                      }
+                    >
+                      Continue without a swap…
+                    </button>
+                  </section>
+                )}
+                {dialog.step === "review" &&
+                validBalancedSwap &&
+                balanceAssignment ? (
+                  <SwapReview first={assignment} second={balanceAssignment} />
+                ) : null}
               </>
             ) : null}
           </>
@@ -314,7 +395,9 @@ export function ChangeDialog({
                 value={dialog.firstId}
                 assignments={assignments}
                 disabled={pending}
-                onChange={(firstId) => onChange({ ...dialog, firstId })}
+                onChange={(firstId) =>
+                  onChange({ ...dialog, firstId, secondId: "" })
+                }
               />
               <span className="swap-glyph" aria-hidden="true">
                 <Icon name="swap" />
@@ -323,8 +406,15 @@ export function ChangeDialog({
                 id="second-assignment"
                 label="Second turn"
                 value={dialog.secondId}
-                assignments={assignments}
-                disabled={pending}
+                assignments={chronological(assignments).filter(
+                  (candidate) =>
+                    first &&
+                    candidate.chore.id === first.chore.id &&
+                    candidate.member.id !== first.member.id &&
+                    candidate.member.active &&
+                    candidate.period.localStartDate > localToday,
+                )}
+                disabled={pending || !first}
                 onChange={(secondId) => onChange({ ...dialog, secondId })}
               />
               {first ? (
@@ -357,10 +447,15 @@ export function ChangeDialog({
               ) : null}
               {dialog.firstId && dialog.secondId && !validSwap ? (
                 <p className="field-error">
-                  Choose two turns held by different people.
+                  Choose a future turn of the same chore held by a different
+                  person.
                 </p>
               ) : null}
             </div>
+            <p className="swap-guidance">
+              Trade one for one: choose a first turn, then a future turn of the
+              same chore held by a different person.
+            </p>
           </>
         ) : null}
         {dialog.kind === "swap" && first && second && validSwap ? (
@@ -385,10 +480,10 @@ export function ChangeDialog({
             className="button quiet"
             type="button"
             onClick={() => {
-              if (dialog.kind === "reassign" && dialog.step === "review") {
+              if (dialog.kind === "reassign" && dialog.step !== "recipient") {
                 onChange({
                   ...dialog,
-                  step: "recipient",
+                  step: dialog.step === "override" ? "review" : "recipient",
                   balanceAssignmentId: "",
                 });
               } else {
@@ -397,7 +492,7 @@ export function ChangeDialog({
             }}
             disabled={pending}
           >
-            {dialog.kind === "reassign" && dialog.step === "review"
+            {dialog.kind === "reassign" && dialog.step !== "recipient"
               ? "Back"
               : "Cancel"}
           </button>
@@ -419,9 +514,7 @@ export function ChangeDialog({
               Boolean(conflict && !reviewedConflict) ||
               (dialog.kind === "reassign"
                 ? !validRecipient ||
-                  (dialog.step === "review" &&
-                    Boolean(dialog.balanceAssignmentId) &&
-                    !validBalancedSwap)
+                  (dialog.step === "review" && !validBalancedSwap)
                 : !validSwap)
             }
           >
@@ -430,7 +523,9 @@ export function ChangeDialog({
               : dialog.kind === "reassign"
                 ? dialog.step === "recipient"
                   ? "Continue"
-                  : "Confirm change"
+                  : dialog.step === "override"
+                    ? "Confirm one-time change"
+                    : "Confirm swap"
                 : "Confirm"}
           </button>
         </footer>

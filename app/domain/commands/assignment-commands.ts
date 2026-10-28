@@ -68,6 +68,7 @@ export type AssignmentCommandResult =
         | "no_op"
         | "past_assignment"
         | "recipient_busy"
+        | "chore_mismatch"
         | "recipient_ineligible";
     }
   | { status: "error" };
@@ -227,6 +228,10 @@ export function createAssignmentCommandService(
           ))
         ) {
           return { status: "rejected", reason: "recipient_ineligible" };
+        }
+
+        if (ordered[0].choreId !== ordered[1].choreId) {
+          return { status: "rejected", reason: "chore_mismatch" };
         }
 
         // An explicit trade balances two turns, not each individual week's load.

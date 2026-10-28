@@ -300,7 +300,7 @@ describe("safe synchronized Monday cutover", () => {
     ]);
   });
 
-  it("blocks one-time stacking but permits same-week swaps; shortened periods end on Monday", async () => {
+  it("blocks one-time stacking and cross-chore swaps; shortened periods end on Monday", async () => {
     await transition();
     const service = createAssignmentCommandService(db());
     const commandContext = {
@@ -326,6 +326,7 @@ describe("safe synchronized Monday cutover", () => {
       runHomeAction(
         actionRequest({
           intent: "reassign",
+          oneTimeOverride: "true",
           assignmentId: id("dishwasher"),
           recipientMemberId: "member-b",
           expectedVersion: "1",
@@ -354,7 +355,14 @@ describe("safe synchronized Monday cutover", () => {
         },
         commandContext,
       ),
-    ).resolves.toMatchObject({ status: "success" });
+    ).resolves.toEqual({ status: "rejected", reason: "chore_mismatch" });
+    await expect(
+      db()
+        .prepare(
+          "SELECT count(*) AS count FROM assignment_audit_events WHERE operation_id='same-week'",
+        )
+        .all(),
+    ).resolves.toMatchObject({ results: [{ count: 0 }] });
     await expect(
       service.reassign(
         {
