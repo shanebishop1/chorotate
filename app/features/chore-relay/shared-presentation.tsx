@@ -78,7 +78,7 @@ export function Person({
       className={`person person-${cueClass(member.id)} person-${size}`}
       aria-hidden="true"
     >
-      <span>{initials(member.displayName)}</span>
+      <span data-initial={initials(member.displayName)} />
       {member.imageUrl ? (
         <img
           src={member.imageUrl}
@@ -134,7 +134,8 @@ export function accessibleCalendarDate(localDate: string): string {
 }
 
 export function assignmentActionLabel(assignment: ProjectedAssignment): string {
-  return `Reassign ${assignment.chore.name}, ${formatPeriod(assignment.period)}, assigned to ${assignment.member.displayName}`;
+  // Keep the visible chore/person text contiguous for voice-control matching.
+  return `Reassign ${assignment.chore.name} ${assignment.member.displayName}, ${formatPeriod(assignment.period)}`;
 }
 
 export function formatDate(localDate: string): string {
