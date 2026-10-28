@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "auth:schema:check": "node scripts/auth/check-auth-schema.mjs",
-    "auth:schema:generate": "auth generate --config scripts/auth/better-auth-schema.ts --output migrations/0004_better_auth.sql --adapter kysely --dialect sqlite --yes",
+    "auth:schema:generate": "auth generate --config scripts/auth/better-auth-schema.ts --output scripts/auth/better-auth-schema.sql --adapter kysely --dialect sqlite --yes",
     "build": "react-router build",
     "check": "npm run format:check && npm run lint && npm run auth:schema:check && npm run cf-typegen:check && npm run typecheck && npm test && npm run test:workerd",
     "check:release": "node scripts/quality/release-gate.mjs",
@@ -14,7 +14,7 @@
     "deploy": "node scripts/deployment/production-deploy.mjs",
     "deploy:production": "node scripts/deployment/production-deploy.mjs deploy",
     "deploy:production:dry-run": "node scripts/deployment/production-deploy.mjs dry-run",
-    "deploy:production:test": "node --test scripts/deployment/production-deploy.test.mjs",
+    "deploy:production:test": "node --test scripts/deployment/production-deploy.test.mjs scripts/deployment/authorize-release.test.mjs scripts/automation/dependabot.test.mjs",
     "doctor": "node scripts/quality/doctor.mjs",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
@@ -43,7 +43,7 @@
     "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
-    "better-auth": "1.7.2",
+    "better-auth": "1.7.14",
     "isbot": "5.2.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -51,35 +51,36 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@cloudflare/vite-plugin": "1.54.2",
-    "@cloudflare/vitest-plugin": "1.1.2",
+    "@cloudflare/vite-plugin": "1.65.0",
+    "@cloudflare/vitest-plugin": "1.4.9",
     "@playwright/test": "1.62.1",
     "@react-router/dev": "8.3.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "22.20.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
-    "auth": "1.7.2",
+    "auth": "1.7.14",
     "oxfmt": "0.66.0",
     "oxlint": "1.81.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "vite": "8.2.2",
-    "vitest": "4.1.11",
-    "wrangler": "4.127.1"
+    "vite": "8.3.5",
+    "vitest": "4.1.12",
+    "wrangler": "4.154.0"
   },
   "overrides": {
     "sharp": "0.35.5",
     "source-map-js": "1.2.2",
     "tinypool": "2.1.2",
-    "undici": "7.29.1"
+    "undici": "7.30.1"
   },
   "engines": {
     "node": "24.20.0"
   },
   "packageManager": "npm@11.19.0",
   "allowScripts": {
-    "esbuild@0.28.1": true,
-    "workerd@1.20260828.1": true
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true,
+    "workerd@1.20261023.1": true
   }
 }

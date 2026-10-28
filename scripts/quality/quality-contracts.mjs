@@ -22,6 +22,8 @@ const productionDeployOutput = read(
   "scripts/deployment/production-deploy-output.mjs",
 );
 const releaseGate = read("scripts/quality/release-gate.mjs");
+const dependabotWorkflow = read(".github/workflows/dependabot.yml");
+const dependabotConfig = read(".github/dependabot.yml");
 const textbelt = read("app/domain/reminders/textbelt.ts");
 const workerBindings = read("worker-configuration.d.ts");
 
@@ -75,6 +77,33 @@ check(
     releaseGate,
   ),
 );
+check(
+  "production deploy requires green main CI without a bypass",
+  /needs: release-quality/.test(ci) &&
+    /github.ref == 'refs\/heads\/main'/.test(ci) &&
+    /environment: production/.test(ci) &&
+    /if \(mode === "deploy"\) requireGreenMainRelease\(\)/.test(
+      productionDeploy,
+    ) &&
+    /authorize-release.mjs/.test(ci) &&
+    /smoke-production.mjs/.test(ci),
+);
+check(
+  "Dependabot checks npm and actions daily and promotes only trusted main code",
+  /package-ecosystem: npm/.test(dependabotConfig) &&
+    /package-ecosystem: github-actions/.test(dependabotConfig) &&
+    !/interval: monthly/.test(dependabotConfig) &&
+    /workflow_run:/.test(dependabotWorkflow) &&
+    /ref: main/.test(dependabotWorkflow) &&
+    !/npm (?:ci|install)|pull_request_target/.test(dependabotWorkflow) &&
+    /dependabot\.test\.mjs/.test(packageJson.scripts["deploy:production:test"]),
+);
+check(
+  "automation actions are immutable and never persist credentials",
+  [...dependabotWorkflow.matchAll(/^\s*- uses:\s*(\S+)/gm)].every(
+    ([, reference]) => /@[0-9a-f]{40}$/.test(reference),
+  ) && /persist-credentials:\s*false/.test(dependabotWorkflow),
+);
 
 const migrations = readdirSync("migrations")
   .filter((name) => name.endsWith(".sql"))
@@ -82,7 +111,7 @@ const migrations = readdirSync("migrations")
 const migrationNumbers = migrations.map((name) => Number(name.slice(0, 4)));
 check(
   "current ordered migration set",
-  migrations.at(-1) === "0009_schedule_transitions.sql" &&
+  migrations.at(-1) === "0010_better_auth_account_compatibility.sql" &&
     migrationNumbers.every((number, index) => number === index + 1),
   migrations.join(", "),
 );

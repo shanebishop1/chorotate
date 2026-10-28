@@ -103,6 +103,7 @@ export function reminderDatabase(timeZone = "America/New_York"): LocalD1 {
     "migrations/0007_sms_contact_period_outbox.sql",
     "migrations/0008_sms_occurrence_times.sql",
     "migrations/0009_schedule_transitions.sql",
+    "migrations/0010_better_auth_account_compatibility.sql",
   ]) {
     database.exec(readFileSync(resolve(root, file), "utf8"));
   }

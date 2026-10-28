@@ -8,6 +8,7 @@ const expectedMigrations = [
   "0007_sms_contact_period_outbox.sql",
   "0008_sms_occurrence_times.sql",
   "0009_schedule_transitions.sql",
+  "0010_better_auth_account_compatibility.sql",
 ].join("|");
 
 import {
