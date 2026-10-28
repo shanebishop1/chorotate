@@ -32,6 +32,23 @@ jobs:
       - name: Credential-free non-mutating release gate
         run: npm run check:release
 
+  request-dependabot-promotion:
+    needs: release-quality
+    if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/dependabot/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # No PR checkout or scripts in this privileged job. Promotion always runs
+      # trusted main code and independently verifies the PR author, files and CI.
+      - name: Request trusted promotion after token-dispatched CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run dependabot.yml --ref main
+
   deploy-production:
     needs: release-quality
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
