@@ -197,6 +197,11 @@
   object-fit: cover;
 }
 
+/* Initials are a decorative avatar cue, not part of a control's text label. */
+.person > span::before {
+  content: attr(data-initial);
+}
+
 .person::after {
   display: none;
 }

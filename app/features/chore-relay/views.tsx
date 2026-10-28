@@ -352,7 +352,7 @@ function MonthCalendar({
                       <ChoreGlyph choreId={assignment.chore.id} />
                       <span className="month-assignment-chore">
                         {assignment.chore.name}
-                      </span>
+                      </span>{" "}
                       <Person member={assignment.member} size="tiny" />
                       <strong>{assignment.member.displayName}</strong>
                     </button>

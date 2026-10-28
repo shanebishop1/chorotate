@@ -338,7 +338,7 @@ test("Household owns swap and every rendered on-duty cell opens its assignment",
   await expect(page.getByRole("button", { name: "Swap" })).toBeVisible();
   await page.getByRole("button", { name: "Next month" }).click();
   const cell = page
-    .getByRole("button", { name: /Reassign Trash, Fri, Sep 18/ })
+    .getByRole("button", { name: /Reassign Trash Member D, Fri, Sep 18/ })
     .first();
   await cell.click();
   await expect(
@@ -518,7 +518,7 @@ test("no matching future turn requires choosing another member or the explicit o
 }) => {
   await page.goto("/?view=household");
   await page
-    .getByRole("button", { name: /Reassign Trash, Fri, Sep 4/ })
+    .getByRole("button", { name: /Reassign Trash Member B, Fri, Sep 4/ })
     .first()
     .click();
   await page.getByRole("radio", { name: /Member A/ }).check();
@@ -630,13 +630,13 @@ test("assignment, household, and history states keep chore periods attached", as
   await expect(
     page
       .getByRole("button", {
-        name: /Reassign Trash, Fri, Aug 28 – Thu, Sep 3/,
+        name: /Reassign Trash Member A, Fri, Aug 28 – Thu, Sep 3/,
       })
       .first(),
   ).toBeVisible();
   await expect(
     page.getByRole("button", {
-      name: /Reassign Dishwasher, Mon, Aug 31 – Sun, Sep 6/,
+      name: /Reassign Dishwasher Member C, Mon, Aug 31 – Sun, Sep 6/,
     }),
   ).toBeVisible();
   await expect(page.locator('time[datetime="2026-08-31"]')).toHaveAttribute(
@@ -729,7 +729,7 @@ test("household calendar reloads each navigated month", async ({ page }) => {
   await expect(page).toHaveURL("/?view=household&month=2026-09");
   await expect(
     page.getByRole("button", {
-      name: /Reassign Dishwasher, Mon, Aug 24 – Sun, Aug 30/,
+      name: /Reassign Dishwasher Member C, Mon, Aug 24 – Sun, Aug 30/,
     }),
   ).toBeVisible();
 
@@ -740,7 +740,7 @@ test("household calendar reloads each navigated month", async ({ page }) => {
   await expect(
     page
       .getByRole("button", {
-        name: /Reassign Trash, Fri, Oct 2 – Thu, Oct 8/,
+        name: /Reassign Trash Member B, Fri, Oct 2 – Thu, Oct 8/,
       })
       .first(),
   ).toBeVisible();
